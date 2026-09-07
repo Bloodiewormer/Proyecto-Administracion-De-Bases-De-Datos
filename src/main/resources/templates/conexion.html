@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Oracle DB Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+<main class="container py-4 py-md-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-9 col-xl-8">
+            <a class="back-link d-inline-block mb-4" th:href="@{/}">← Oracle DB Monitor</a>
+            <section class="card p-4 p-md-5" aria-labelledby="connection-title">
+                <h1 id="connection-title" class="h2 mb-2">Conectar instancia</h1>
+                <p class="text-body-secondary mb-4">Ingrese los datos de acceso a su instancia Oracle.</p>
+                <div th:if="${success}" class="alert alert-success" role="status" th:text="${success}"></div>
+                <div th:if="${error}" class="alert alert-danger" role="alert" th:text="${error}"></div>
+                <form th:action="@{/conexion}" th:object="${conexion}" method="post">
+                    <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label for="host" class="form-label">Host</label>
+                        <input id="host" type="text" class="form-control" th:field="*{host}" th:errorclass="is-invalid" autocomplete="off" placeholder="localhost" required>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('host')}">Ingrese un host o dirección IPv4 válido.</div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="port" class="form-label">Puerto</label>
+                        <input id="port" type="number" class="form-control" th:field="*{port}" th:errorclass="is-invalid" min="1" max="65535" required>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('port')}">Ingrese un puerto entre 1 y 65535.</div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="serviceName" class="form-label">Service Name</label>
+                        <input id="serviceName" type="text" class="form-control" th:field="*{serviceName}" th:errorclass="is-invalid" autocomplete="off" required>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('serviceName')}">Ingrese un Service Name válido.</div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="username" class="form-label">Usuario</label>
+                        <input id="username" type="text" class="form-control" th:field="*{username}" th:errorclass="is-invalid" autocomplete="username" required>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('username')}">Ingrese el usuario.</div>
+                    </div>
+                        <div class="col-12">
+                            <label for="password" class="form-label">Contraseña</label>
+                            <input id="password" name="password" type="password" class="form-control"
+                                   th:classappend="${#fields.hasErrors('password')} ? 'is-invalid' : ''"
+                                   autocomplete="current-password" required>
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('password')}">Ingrese la contraseña.</div>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-3 mt-4">
+                        <button type="submit" class="btn btn-primary px-4 py-2">Conectar instancia</button>
+                        <a class="btn btn-outline-secondary py-2" th:href="@{/}">Volver al inicio</a>
+                    </div>
+                </form>
+            </section>
+        </div>
+    </div>
+</main>
+</body>
+</html>
