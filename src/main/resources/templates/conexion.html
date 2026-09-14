@@ -17,6 +17,9 @@
                 <h1 id="connection-title" class="h2 mb-2">Conectar instancia</h1>
                 <p class="text-body-secondary mb-4">Ingrese los datos de acceso a su instancia Oracle.</p>
                 <div th:if="${success}" class="alert alert-success" role="status" th:text="${success}"></div>
+                <div th:if="${success}" class="mb-4">
+                    <a class="btn btn-primary" th:href="@{/estado}">Ver estado general</a>
+                </div>
                 <div th:if="${error}" class="alert alert-danger" role="alert" th:text="${error}"></div>
                 <form th:action="@{/conexion}" th:object="${conexion}" method="post">
                     <div class="row g-3">
