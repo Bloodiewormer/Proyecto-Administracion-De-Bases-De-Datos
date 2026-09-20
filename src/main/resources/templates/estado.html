@@ -10,10 +10,7 @@
 </head>
 <body>
 <main class="container py-4 py-md-5">
-    <header class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-        <a class="back-link fs-5" th:href="@{/}">Oracle DB Monitor</a>
-        <a class="btn btn-outline-secondary" th:href="@{/conexion}">Cambiar conexión</a>
-    </header>
+    <div th:replace="~{fragments/navegacion :: cabecera('estado')}"></div>
     <h1 class="mb-4">Estado general</h1>
     <div class="alert alert-warning" role="status" th:if="${!avisos.general.isEmpty()}">
         <p class="mb-2" th:each="aviso : ${avisos.general}" th:text="${aviso}"></p>
@@ -32,7 +29,7 @@
         </section></div>
         <div class="col-12 col-md-4"><section class="card h-100 p-4">
             <h2 class="h6 text-body-secondary">Uptime</h2>
-            <p class="fs-5 mb-0" th:text="${uptimeTexto}"></p>
+            <p class="fs-5 mb-0" th:text="${formatos.duracion(estado.uptime)}"></p>
         </section></div>
     </div>
     <section class="card p-4 mb-4" aria-labelledby="instancia-title">
@@ -83,14 +80,14 @@
         <h2 id="memoria-title" class="h5 mb-3">Memoria de la instancia</h2>
         <dl class="row mb-0">
             <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA asignada</dt>
-                <dd class="mb-1" th:text="${totalSgaTexto}"></dd>
+                <dd class="mb-1" th:text="${formatos.memoria(estado.memoria?.totalSgaBytes)}"></dd>
                 <dd class="small text-body-secondary" th:if="${estado.memoria?.totalSgaBytes != null}"
                     th:text="${estado.memoria.totalSgaBytes.toPlainString() + ' bytes'}"></dd>
             </div>
-            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA utilizada</dt><dd th:text="${sgaUtilizadaTexto}"></dd></div>
-            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA libre</dt><dd th:text="${sgaLibreTexto}"></dd></div>
-            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">PGA asignada</dt><dd th:text="${pgaAsignadaTexto}"></dd></div>
-            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">PGA utilizada</dt><dd th:text="${pgaUtilizadaTexto}"></dd></div>
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA utilizada</dt><dd th:text="${formatos.memoria(estado.memoria?.uso?.sgaUtilizadaBytes)}"></dd></div>
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA libre</dt><dd th:text="${formatos.memoria(estado.memoria?.uso?.sgaLibreBytes)}"></dd></div>
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">PGA asignada</dt><dd th:text="${formatos.memoria(estado.memoria?.uso?.pgaAsignadaBytes)}"></dd></div>
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">PGA utilizada</dt><dd th:text="${formatos.memoria(estado.memoria?.uso?.pgaUtilizadaBytes)}"></dd></div>
         </dl>
         <h3 class="h6 mt-3">Componentes de la SGA</h3>
         <p class="text-body-secondary" th:if="${estado.memoria == null or estado.memoria.componentes.isEmpty()}">No disponible</p>
@@ -98,10 +95,10 @@
             <table class="table align-middle">
                 <caption>Componentes SGA. Los tamaños legibles están redondeados; los bytes conservan el valor recibido.</caption>
                 <thead><tr><th scope="col">Componente</th><th scope="col">Ámbito</th><th scope="col" class="text-end">Tamaño</th><th scope="col" class="text-end">Bytes</th></tr></thead>
-                <tbody><tr th:each="componente, fila : ${estado.memoria.componentes}">
+                <tbody><tr th:each="componente : ${estado.memoria.componentes}">
                     <th scope="row" class="fw-normal" th:text="${componente.nombre ?: 'No disponible'}"></th>
                     <td th:text="${componente.conId == null ? 'No disponible' : (componente.conId == 0 ? 'Instancia global' : 'Contenedor ' + componente.conId)}"></td>
-                    <td class="text-end text-nowrap" th:text="${tamanosSga[fila.index]}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(componente.bytes)}"></td>
                     <td class="text-end text-nowrap" th:text="${componente.bytes != null ? componente.bytes.toPlainString() : 'No disponible'}"></td>
                 </tr></tbody>
             </table>

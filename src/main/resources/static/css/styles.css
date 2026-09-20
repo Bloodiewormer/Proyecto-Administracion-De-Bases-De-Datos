@@ -64,3 +64,18 @@ h1 {
     font-weight: 600;
     text-decoration: none;
 }
+
+.nav-pills {
+    --bs-nav-pills-link-active-bg: #8b1e2d;
+    --bs-nav-link-color: #252a34;
+    --bs-nav-link-hover-color: #6f1724;
+}
+
+.table caption {
+    caption-side: bottom;
+    font-size: .85rem;
+}
+
+code {
+    color: #6f1724;
+}

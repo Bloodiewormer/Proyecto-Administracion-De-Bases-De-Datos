@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<body>
+<header th:fragment="cabecera (seccion)" class="mb-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <a class="back-link fs-5" th:href="@{/}">Oracle DB Monitor</a>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/conexion}">Cambiar conexión</a>
+    </div>
+    <nav class="mt-3" aria-label="Módulos de administración">
+        <ul class="nav nav-pills gap-2">
+            <li class="nav-item">
+                <a class="nav-link" th:href="@{/estado}"
+                   th:classappend="${seccion == 'estado'} ? 'active' : ''"
+                   th:attr="aria-current=${seccion == 'estado'} ? 'page' : null">Estado general</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" th:href="@{/rendimiento}"
+                   th:classappend="${seccion == 'rendimiento'} ? 'active' : ''"
+                   th:attr="aria-current=${seccion == 'rendimiento'} ? 'page' : null">Rendimiento</a>
+            </li>
+        </ul>
+    </nav>
+</header>
+</body>
+</html>

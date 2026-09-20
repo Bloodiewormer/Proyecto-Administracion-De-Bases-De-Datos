@@ -1,56 +1,74 @@
 package cr.ac.una.dbmonitor.service;
 
+import com.zaxxer.hikari.HikariDataSource;
 import cr.ac.una.dbmonitor.dto.ConexionOracleDto;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Service;
 
 import java.net.SocketTimeoutException;
 import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
-import java.util.Properties;
 
 @Service
 public class ConexionOracleService {
-    private volatile DriverManagerDataSource activeDataSource;
+    private static final int TIMEOUT_CONSULTA_SEGUNDOS = 5;
+
+    private volatile HikariDataSource origenActivo;
 
     public synchronized void conectar(ConexionOracleDto form) {
-        DriverManagerDataSource candidate = crearDataSource(form);
-        try (var connection = candidate.getConnection();
+        HikariDataSource candidato = crearDataSource(form);
+        try (var connection = candidato.getConnection();
              var statement = connection.createStatement()) {
-            statement.setQueryTimeout(5);
+            statement.setQueryTimeout(TIMEOUT_CONSULTA_SEGUNDOS);
             try (var result = statement.executeQuery("SELECT 1 FROM DUAL")) {
                 if (!result.next() || result.getInt(1) != 1) {
                     throw new IllegalStateException("Oracle no devolvió el resultado esperado. La configuración activa no se modificó.");
                 }
             }
         } catch (SQLException ex) {
+            cerrar(candidato);
             throw new IllegalStateException(mensajeError(ex));
+        } catch (RuntimeException ex) {
+            cerrar(candidato);
+            throw ex;
         }
-        activeDataSource = candidate;
+        var anterior = origenActivo;
+        origenActivo = candidato;
+        cerrar(anterior);
     }
 
-    DriverManagerDataSource crearDataSource(ConexionOracleDto form) {
-        var source = new DriverManagerDataSource();
-        source.setUrl("jdbc:oracle:thin:@//" + form.getHost().trim() + ":" + form.getPort()
+    HikariDataSource crearDataSource(ConexionOracleDto form) {
+        var origen = new HikariDataSource();
+        origen.setPoolName("oracle-monitor");
+        origen.setJdbcUrl("jdbc:oracle:thin:@//" + form.getHost().trim() + ":" + form.getPort()
                 + "/" + form.getServiceName().trim());
-        source.setUsername(form.getUsername().trim());
-        source.setPassword(form.getPassword());
-        var properties = new Properties();
-        properties.setProperty("oracle.net.CONNECT_TIMEOUT", "5000");
-        properties.setProperty("oracle.net.OUTBOUND_CONNECT_TIMEOUT", "5000");
-        properties.setProperty("oracle.jdbc.ReadTimeout", "10000");
-        source.setConnectionProperties(properties);
-        return source;
+        origen.setUsername(form.getUsername().trim());
+        origen.setPassword(form.getPassword());
+        origen.setMaximumPoolSize(5);
+        origen.setMinimumIdle(1);
+        origen.setConnectionTimeout(5000);
+        origen.setValidationTimeout(3000);
+        origen.setIdleTimeout(60000);
+        origen.setMaxLifetime(900000);
+        origen.addDataSourceProperty("oracle.net.CONNECT_TIMEOUT", "5000");
+        origen.addDataSourceProperty("oracle.net.OUTBOUND_CONNECT_TIMEOUT", "5000");
+        origen.addDataSourceProperty("oracle.jdbc.ReadTimeout", "10000");
+        return origen;
+    }
+
+    private void cerrar(HikariDataSource origen) {
+        if (origen != null) {
+            origen.close();
+        }
     }
 
     public JdbcTemplate obtenerJdbcTemplate() {
-        var source = activeDataSource;
-        if (source == null) {
+        var origen = origenActivo;
+        if (origen == null) {
             throw new IllegalStateException("Primero configure una conexión Oracle.");
         }
-        var template = new JdbcTemplate(source);
-        template.setQueryTimeout(5);
+        var template = new JdbcTemplate(origen);
+        template.setQueryTimeout(TIMEOUT_CONSULTA_SEGUNDOS);
         return template;
     }
 
