@@ -40,13 +40,19 @@ class EstadoInstanciaRepositoryTests {
         when(rs.getString("HOST_NAME")).thenReturn("host-prueba");
         when(rs.getString("INSTANCE_NAME")).thenReturn("instancia-prueba");
         when(rs.getString("VERSION_FULL")).thenReturn("21.0.0.0.0");
+        when(rs.getString("EDITION")).thenReturn("XE");
+        when(rs.getString("DATABASE_TYPE")).thenReturn("SINGLE");
         when(rs.getString("STATUS")).thenReturn("OPEN");
         when(rs.getTimestamp("STARTUP_TIME")).thenReturn(Timestamp.valueOf(inicio));
         when(rs.getString("NAME")).thenReturn("nombre-prueba");
         when(rs.getString("OPEN_MODE")).thenReturn("READ WRITE");
         when(rs.getString("CDB")).thenReturn("YES");
         when(rs.getBigDecimal("VALUE")).thenReturn(new BigDecimal("4294967296"));
+        when(rs.getBigDecimal("SGA_LIBRE")).thenReturn(new BigDecimal("1024"));
+        when(rs.getBigDecimal("PGA_ASIGNADA")).thenReturn(new BigDecimal("2048"));
+        when(rs.getBigDecimal("PGA_UTILIZADA")).thenReturn(new BigDecimal("512"));
         when(rs.getObject("CON_ID", Integer.class)).thenReturn(3);
+        when(rs.getInt("ACTUAL")).thenReturn(1);
         when(jdbc.query(anyString(), any(RowMapper.class))).thenAnswer(invocation -> {
             RowMapper<?> mapper = invocation.getArgument(1);
             return List.of(mapper.mapRow(rs, 0));
@@ -55,14 +61,66 @@ class EstadoInstanciaRepositoryTests {
         assertEquals("host-prueba", datos.instancia().host());
         assertEquals("instancia-prueba", datos.instancia().nombre());
         assertEquals("21.0.0.0.0", datos.instancia().version());
+        assertEquals("XE", datos.instancia().edicion());
+        assertEquals("SINGLE", datos.instancia().tipoDespliegue());
         assertEquals(inicio, datos.instancia().inicio());
         assertNull(datos.instancia().fechaConsulta());
         assertEquals(new BigDecimal("4294967296"), datos.memoria().componentes().getFirst().bytes());
         assertEquals(3, datos.memoria().componentes().getFirst().conId());
+        assertEquals(new BigDecimal("1024"), datos.memoria().uso().sgaLibreBytes());
+        assertEquals(new BigDecimal("2048"), datos.memoria().uso().pgaAsignadaBytes());
+        assertNull(datos.memoria().uso().sgaUtilizadaBytes());
         assertEquals("YES", datos.baseDatos().base().cdb());
+        assertEquals(1, datos.baseDatos().contenedores().size());
         assertEquals("READ WRITE", datos.baseDatos().contenedorActual().modoApertura());
         verify(conexion, times(1)).obtenerJdbcTemplate();
         verify(jdbc).query(contains("SYS_CONTEXT('USERENV', 'CON_ID')"), any(RowMapper.class));
+    }
+
+    @Test
+    void listaTodosLosContenedoresYMarcaElActual() throws Exception {
+        when(conexion.obtenerJdbcTemplate()).thenReturn(jdbc);
+        var raiz = mock(ResultSet.class);
+        when(raiz.getObject("CON_ID", Integer.class)).thenReturn(1);
+        when(raiz.getString("NAME")).thenReturn("CDB$ROOT");
+        when(raiz.getInt("ACTUAL")).thenReturn(0);
+        var conectable = mock(ResultSet.class);
+        when(conectable.getObject("CON_ID", Integer.class)).thenReturn(3);
+        when(conectable.getString("NAME")).thenReturn("XEPDB1");
+        when(conectable.getInt("ACTUAL")).thenReturn(1);
+        when(jdbc.query(anyString(), any(RowMapper.class))).thenReturn(List.of());
+        when(jdbc.query(contains("FROM V$CONTAINERS"), any(RowMapper.class))).thenAnswer(invocation -> {
+            RowMapper<?> mapper = invocation.getArgument(1);
+            return List.of(mapper.mapRow(raiz, 0), mapper.mapRow(conectable, 1));
+        });
+        var datos = repository.consultar();
+        assertEquals(List.of("CDB$ROOT", "XEPDB1"),
+                datos.baseDatos().contenedores().stream().map(c -> c.nombre()).toList());
+        assertEquals("XEPDB1", datos.baseDatos().contenedorActual().nombre());
+    }
+
+    @Test
+    void versionFullAusenteUsaConsultaCompatible() throws Exception {
+        when(conexion.obtenerJdbcTemplate()).thenReturn(jdbc);
+        var rs = mock(ResultSet.class);
+        when(rs.getString("HOST_NAME")).thenReturn("host-antiguo");
+        when(rs.getString("VERSION")).thenReturn("11.2.0.4.0");
+        when(rs.getString("STATUS")).thenReturn("OPEN");
+        when(jdbc.query(anyString(), any(RowMapper.class))).thenReturn(List.of());
+        when(jdbc.query(contains("VERSION_FULL"), any(RowMapper.class))).thenThrow(
+                new BadSqlGrammarException("privado", "privado", new SQLException("secreto", "42000", 904)));
+        when(jdbc.query(contains("INSTANCE_NAME, VERSION,"), any(RowMapper.class))).thenAnswer(invocation -> {
+            RowMapper<?> mapper = invocation.getArgument(1);
+            return List.of(mapper.mapRow(rs, 0));
+        });
+        var datos = repository.consultar();
+        assertEquals("host-antiguo", datos.instancia().host());
+        assertEquals("11.2.0.4.0", datos.instancia().version());
+        assertEquals("OPEN", datos.instancia().estado());
+        assertNull(datos.instancia().edicion());
+        assertNull(datos.instancia().tipoDespliegue());
+        assertTrue(datos.avisos().stream().anyMatch(a -> a.contains("versión básica")));
+        assertFalse(datos.avisos().toString().contains("secreto"));
     }
 
     @Test
@@ -73,9 +131,11 @@ class EstadoInstanciaRepositoryTests {
         assertNull(datos.instancia());
         assertTrue(datos.memoria().componentes().isEmpty());
         assertNull(datos.memoria().totalSgaBytes());
+        assertNull(datos.memoria().uso());
         assertNull(datos.baseDatos().base());
+        assertTrue(datos.baseDatos().contenedores().isEmpty());
         assertNull(datos.baseDatos().contenedorActual());
-        assertEquals(4, datos.avisos().size());
+        assertEquals(5, datos.avisos().size());
     }
 
     @ParameterizedTest

@@ -20,6 +20,21 @@ import java.util.function.Supplier;
 
 @Repository
 public class EstadoInstanciaRepository {
+    private static final String INSTANCIA_CON_EDICION = "SELECT HOST_NAME, INSTANCE_NAME, VERSION_FULL, EDITION, "
+            + "DATABASE_TYPE, STATUS, STARTUP_TIME, SYSDATE AS FECHA_CONSULTA FROM V$INSTANCE";
+    private static final String INSTANCIA_COMPATIBLE = "SELECT HOST_NAME, INSTANCE_NAME, VERSION, STATUS, "
+            + "STARTUP_TIME, SYSDATE AS FECHA_CONSULTA FROM V$INSTANCE";
+    private static final String COMPONENTES_SGA = "SELECT NAME, VALUE, CON_ID FROM V$SGA";
+    private static final String USO_MEMORIA = "SELECT "
+            + "(SELECT SUM(BYTES) FROM V$SGASTAT WHERE NAME = 'free memory') AS SGA_LIBRE, "
+            + "(SELECT MAX(VALUE) FROM V$PGASTAT WHERE NAME = 'total PGA allocated') AS PGA_ASIGNADA, "
+            + "(SELECT MAX(VALUE) FROM V$PGASTAT WHERE NAME = 'total PGA inuse') AS PGA_UTILIZADA FROM DUAL";
+    private static final String BASE_DATOS = "SELECT NAME, OPEN_MODE, CDB FROM V$DATABASE";
+    private static final String CONTENEDORES = "SELECT CON_ID, NAME, OPEN_MODE, "
+            + "CASE WHEN CON_ID = TO_NUMBER(SYS_CONTEXT('USERENV', 'CON_ID')) THEN 1 ELSE 0 END AS ACTUAL "
+            + "FROM V$CONTAINERS ORDER BY CON_ID";
+    private static final String VISTA_USO_MEMORIA = "V$SGASTAT/V$PGASTAT";
+
     private final ConexionOracleService conexion;
 
     public EstadoInstanciaRepository(ConexionOracleService conexion) {
@@ -35,26 +50,59 @@ public class EstadoInstanciaRepository {
                     List.of("No hay conexión configurada. Conecte una instancia Oracle."));
         }
         var avisos = new ArrayList<String>();
-        var instancia = unica(leer("V$INSTANCE", () -> jdbc.query(
-                "SELECT HOST_NAME, INSTANCE_NAME, VERSION_FULL, STATUS, STARTUP_TIME, SYSDATE AS FECHA_CONSULTA FROM V$INSTANCE",
-                (rs, row) -> new EstadoInstanciaDto.Instancia(rs.getString("HOST_NAME"),
-                        rs.getString("INSTANCE_NAME"), rs.getString("VERSION_FULL"), rs.getString("STATUS"),
-                        fecha(rs, "STARTUP_TIME"), fecha(rs, "FECHA_CONSULTA"))), avisos), "V$INSTANCE", avisos);
-        var componentes = leer("V$SGA", () -> jdbc.query(
-                "SELECT NAME, VALUE, CON_ID FROM V$SGA",
+        var instancia = unica(leer("V$INSTANCE", () -> consultarInstancia(jdbc, avisos), avisos),
+                "V$INSTANCE", avisos);
+        var componentes = leer("V$SGA", () -> jdbc.query(COMPONENTES_SGA,
                 (rs, row) -> new MemoriaInstanciaDto.Componente(rs.getString("NAME"),
                         rs.getBigDecimal("VALUE"), rs.getObject("CON_ID", Integer.class))), avisos);
-        var base = unica(leer("V$DATABASE", () -> jdbc.query(
-                "SELECT NAME, OPEN_MODE, CDB FROM V$DATABASE",
+        var uso = unica(leer(VISTA_USO_MEMORIA, () -> jdbc.query(USO_MEMORIA,
+                (rs, row) -> new MemoriaInstanciaDto.Uso(rs.getBigDecimal("SGA_LIBRE"), null,
+                        rs.getBigDecimal("PGA_ASIGNADA"), rs.getBigDecimal("PGA_UTILIZADA"))), avisos),
+                VISTA_USO_MEMORIA, avisos);
+        var base = unica(leer("V$DATABASE", () -> jdbc.query(BASE_DATOS,
                 (rs, row) -> new BaseDatosDto.Base(rs.getString("NAME"), rs.getString("OPEN_MODE"),
                         rs.getString("CDB"))), avisos), "V$DATABASE", avisos);
-        var contenedor = unica(leer("V$CONTAINERS", () -> jdbc.query(
-                "SELECT CON_ID, NAME, OPEN_MODE FROM V$CONTAINERS WHERE CON_ID = TO_NUMBER(SYS_CONTEXT('USERENV', 'CON_ID'))",
+        var contenedores = leer("V$CONTAINERS", () -> jdbc.query(CONTENEDORES,
                 (rs, row) -> new BaseDatosDto.Contenedor(rs.getObject("CON_ID", Integer.class),
-                        rs.getString("NAME"), rs.getString("OPEN_MODE"))), avisos), "V$CONTAINERS", avisos);
-        return new EstadoInstanciaDto(instancia, null,
-                componentes == null ? null : new MemoriaInstanciaDto(componentes, null),
-                new BaseDatosDto(base, contenedor), avisos);
+                        rs.getString("NAME"), rs.getString("OPEN_MODE"), rs.getInt("ACTUAL") == 1)), avisos);
+        return new EstadoInstanciaDto(instancia, null, memoria(componentes, uso),
+                new BaseDatosDto(base, contenedores), avisos);
+    }
+
+    private MemoriaInstanciaDto memoria(List<MemoriaInstanciaDto.Componente> componentes,
+                                        MemoriaInstanciaDto.Uso uso) {
+        if (componentes == null && uso == null) {
+            return null;
+        }
+        return new MemoriaInstanciaDto(componentes == null ? List.of() : componentes, null, uso);
+    }
+
+    private List<EstadoInstanciaDto.Instancia> consultarInstancia(JdbcTemplate jdbc, List<String> avisos) {
+        try {
+            return jdbc.query(INSTANCIA_CON_EDICION, (rs, row) -> new EstadoInstanciaDto.Instancia(
+                    rs.getString("HOST_NAME"), rs.getString("INSTANCE_NAME"), rs.getString("VERSION_FULL"),
+                    rs.getString("EDITION"), rs.getString("DATABASE_TYPE"), rs.getString("STATUS"),
+                    fecha(rs, "STARTUP_TIME"), fecha(rs, "FECHA_CONSULTA")));
+        } catch (DataAccessException ex) {
+            if (!columnaInexistente(ex)) {
+                throw ex;
+            }
+            avisos.add("V$INSTANCE: esta versión de Oracle no expone la edición ni la versión completa; "
+                    + "se muestra la versión básica.");
+            return jdbc.query(INSTANCIA_COMPATIBLE, (rs, row) -> new EstadoInstanciaDto.Instancia(
+                    rs.getString("HOST_NAME"), rs.getString("INSTANCE_NAME"), rs.getString("VERSION"),
+                    null, null, rs.getString("STATUS"),
+                    fecha(rs, "STARTUP_TIME"), fecha(rs, "FECHA_CONSULTA")));
+        }
+    }
+
+    private boolean columnaInexistente(DataAccessException error) {
+        for (Throwable causa = error; causa != null; causa = causa.getCause()) {
+            if (causa instanceof SQLException sql && sql.getErrorCode() == 904) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private LocalDateTime fecha(ResultSet rs, String columna) throws SQLException {

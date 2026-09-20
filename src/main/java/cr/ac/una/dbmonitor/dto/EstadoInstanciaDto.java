@@ -10,6 +10,6 @@ public record EstadoInstanciaDto(Instancia instancia, Duration uptime, MemoriaIn
         avisos = List.copyOf(avisos);
     }
 
-    public record Instancia(String host, String nombre, String version, String estado,
-                            LocalDateTime inicio, LocalDateTime fechaConsulta) {}
+    public record Instancia(String host, String nombre, String version, String edicion, String tipoDespliegue,
+                            String estado, LocalDateTime inicio, LocalDateTime fechaConsulta) {}
 }

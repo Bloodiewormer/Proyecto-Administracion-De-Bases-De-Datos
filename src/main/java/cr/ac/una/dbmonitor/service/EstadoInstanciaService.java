@@ -38,7 +38,9 @@ public class EstadoInstanciaService {
         }
         var memoria = datos.memoria();
         if (memoria != null) {
-            memoria = new MemoriaInstanciaDto(memoria.componentes(), totalSga(memoria, avisos));
+            var totalSga = totalSga(memoria, avisos);
+            memoria = new MemoriaInstanciaDto(memoria.componentes(), totalSga,
+                    uso(totalSga, memoria.uso(), avisos));
         }
         return new EstadoInstanciaDto(instancia, uptime, memoria, datos.baseDatos(), avisos);
     }
@@ -60,5 +62,23 @@ public class EstadoInstanciaService {
             total = total.add(componente.bytes());
         }
         return total;
+    }
+
+    private MemoriaInstanciaDto.Uso uso(BigDecimal totalSga, MemoriaInstanciaDto.Uso uso, List<String> avisos) {
+        if (uso == null) {
+            return null;
+        }
+        BigDecimal utilizada = null;
+        if (uso.sgaLibreBytes() == null) {
+            avisos.add("Memoria SGA utilizada no disponible: Oracle no reportó la memoria libre.");
+        } else if (totalSga == null) {
+            avisos.add("Memoria SGA utilizada no disponible: falta el total de la SGA.");
+        } else if (totalSga.compareTo(uso.sgaLibreBytes()) < 0) {
+            avisos.add("Memoria SGA utilizada no disponible: los valores de Oracle son inconsistentes.");
+        } else {
+            utilizada = totalSga.subtract(uso.sgaLibreBytes());
+        }
+        return new MemoriaInstanciaDto.Uso(uso.sgaLibreBytes(), utilizada,
+                uso.pgaAsignadaBytes(), uso.pgaUtilizadaBytes());
     }
 }

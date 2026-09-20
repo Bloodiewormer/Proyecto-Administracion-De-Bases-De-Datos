@@ -17,15 +17,21 @@ class EstadoInstanciaServiceTests {
 
     private EstadoInstanciaDto calcular(EstadoInstanciaDto.Instancia instancia,
                                         List<MemoriaInstanciaDto.Componente> componentes) {
+        return calcular(instancia, componentes, null);
+    }
+
+    private EstadoInstanciaDto calcular(EstadoInstanciaDto.Instancia instancia,
+                                        List<MemoriaInstanciaDto.Componente> componentes,
+                                        MemoriaInstanciaDto.Uso uso) {
         when(repository.consultar()).thenReturn(new EstadoInstanciaDto(instancia, null,
-                new MemoriaInstanciaDto(componentes, null), null, List.of("aviso previo")));
+                new MemoriaInstanciaDto(componentes, null, uso), null, List.of("aviso previo")));
         return service.obtenerEstado();
     }
 
     @Test
     void calculaUptimeConFechasOracle() {
         var inicio = LocalDateTime.of(2026, 1, 1, 10, 0);
-        var instancia = new EstadoInstanciaDto.Instancia("host", "instancia", "version", "OPEN",
+        var instancia = new EstadoInstanciaDto.Instancia("host", "instancia", "version", "XE", "SINGLE", "OPEN",
                 inicio, inicio.plusDays(2).plusSeconds(45));
         var datos = calcular(instancia, List.of());
         assertEquals(Duration.ofDays(2).plusSeconds(45), datos.uptime());
@@ -35,10 +41,10 @@ class EstadoInstanciaServiceTests {
     @Test
     void fechasAusentesONegativasNoInventanUptime() {
         var ahora = LocalDateTime.of(2026, 1, 1, 10, 0);
-        assertNull(calcular(new EstadoInstanciaDto.Instancia(null, null, null, null, null, ahora),
+        assertNull(calcular(new EstadoInstanciaDto.Instancia(null, null, null, null, null, null, null, ahora),
                 List.of()).uptime());
-        assertNull(calcular(new EstadoInstanciaDto.Instancia(null, null, null, null, ahora, ahora.minusSeconds(1)),
-                List.of()).uptime());
+        assertNull(calcular(new EstadoInstanciaDto.Instancia(null, null, null, null, null, null, ahora,
+                ahora.minusSeconds(1)), List.of()).uptime());
     }
 
     @Test
@@ -66,6 +72,32 @@ class EstadoInstanciaServiceTests {
         assertNull(calcular(null, List.of(
                 new MemoriaInstanciaDto.Componente("otro", BigDecimal.valueOf(-1), 0))).memoria().totalSgaBytes());
         assertNull(calcular(null, List.of(valido, valido)).memoria().totalSgaBytes());
+    }
+
+    @Test
+    void restaLaMemoriaLibreParaObtenerLaSgaUtilizada() {
+        var componentes = List.of(new MemoriaInstanciaDto.Componente("Fixed Size", new BigDecimal("1000"), 0));
+        var datos = calcular(null, componentes, new MemoriaInstanciaDto.Uso(new BigDecimal("400"), null,
+                new BigDecimal("50"), new BigDecimal("20")));
+        assertEquals(new BigDecimal("600"), datos.memoria().uso().sgaUtilizadaBytes());
+        assertEquals(new BigDecimal("50"), datos.memoria().uso().pgaAsignadaBytes());
+        assertEquals(new BigDecimal("20"), datos.memoria().uso().pgaUtilizadaBytes());
+    }
+
+    @Test
+    void memoriaLibreAusenteOInconsistenteNoInventaSgaUtilizada() {
+        var componentes = List.of(new MemoriaInstanciaDto.Componente("Fixed Size", new BigDecimal("1000"), 0));
+        var sinLibre = calcular(null, componentes,
+                new MemoriaInstanciaDto.Uso(null, null, null, null));
+        assertNull(sinLibre.memoria().uso().sgaUtilizadaBytes());
+        assertTrue(sinLibre.avisos().stream().anyMatch(a -> a.startsWith("Memoria SGA utilizada no disponible")));
+        var libreMayor = calcular(null, componentes,
+                new MemoriaInstanciaDto.Uso(new BigDecimal("5000"), null, null, null));
+        assertNull(libreMayor.memoria().uso().sgaUtilizadaBytes());
+        var sinTotal = calcular(null, List.of(
+                new MemoriaInstanciaDto.Componente("Fixed Size", new BigDecimal("1000"), 3)),
+                new MemoriaInstanciaDto.Uso(new BigDecimal("400"), null, null, null));
+        assertNull(sinTotal.memoria().uso().sgaUtilizadaBytes());
     }
 
     @Test

@@ -1,5 +1,6 @@
 package cr.ac.una.dbmonitor.controller;
 
+import cr.ac.una.dbmonitor.dto.MemoriaInstanciaDto;
 import cr.ac.una.dbmonitor.service.EstadoInstanciaService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Controller;
@@ -33,21 +34,42 @@ public class EstadoInstanciaController {
                 : estado.memoria().componentes().stream().map(c -> memoriaLegible(c.bytes())).toList());
         model.addAttribute("totalSgaTexto", memoriaLegible(estado.memoria() == null
                 ? null : estado.memoria().totalSgaBytes()));
+        MemoriaInstanciaDto.Uso uso = estado.memoria() == null ? null : estado.memoria().uso();
+        model.addAttribute("sgaUtilizadaTexto", memoriaLegible(uso == null ? null : uso.sgaUtilizadaBytes()));
+        model.addAttribute("sgaLibreTexto", memoriaLegible(uso == null ? null : uso.sgaLibreBytes()));
+        model.addAttribute("pgaAsignadaTexto", memoriaLegible(uso == null ? null : uso.pgaAsignadaBytes()));
+        model.addAttribute("pgaUtilizadaTexto", memoriaLegible(uso == null ? null : uso.pgaUtilizadaBytes()));
         var avisos = new LinkedHashMap<String, List<String>>();
         for (var seccion : List.of("general", "instancia", "base", "memoria")) {
             avisos.put(seccion, new ArrayList<>());
         }
         for (var aviso : estado.avisos()) {
-            String seccion = aviso.startsWith("V$INSTANCE") || aviso.startsWith("Tiempo de actividad")
-                    ? "instancia" : aviso.startsWith("V$SGA") || aviso.startsWith("Total SGA")
-                    ? "memoria" : aviso.startsWith("V$DATABASE") || aviso.startsWith("V$CONTAINERS")
-                    ? "base" : "general";
-            avisos.get(seccion).add(aviso.replace("V$INSTANCE:", "Instancia:")
-                    .replace("V$DATABASE:", "Base de datos:").replace("V$CONTAINERS:", "Contenedor:")
-                    .replace("V$SGA:", "Memoria SGA:").replace(" (CON_ID = 0)", ""));
+            avisos.get(seccion(aviso)).add(legible(aviso));
         }
         model.addAttribute("avisos", avisos);
         return "estado";
+    }
+
+    private String seccion(String aviso) {
+        if (aviso.startsWith("V$INSTANCE") || aviso.startsWith("Tiempo de actividad")) {
+            return "instancia";
+        }
+        if (aviso.startsWith("V$SGA") || aviso.startsWith("Total SGA") || aviso.startsWith("Memoria SGA")) {
+            return "memoria";
+        }
+        if (aviso.startsWith("V$DATABASE") || aviso.startsWith("V$CONTAINERS")) {
+            return "base";
+        }
+        return "general";
+    }
+
+    private String legible(String aviso) {
+        return aviso.replace("V$INSTANCE:", "Instancia:")
+                .replace("V$DATABASE:", "Base de datos:")
+                .replace("V$CONTAINERS:", "Bases administradas:")
+                .replace("V$SGASTAT/V$PGASTAT:", "Uso de memoria:")
+                .replace("V$SGA:", "Memoria SGA:")
+                .replace(" (CON_ID = 0)", "");
     }
 
     private String memoriaLegible(BigDecimal bytes) {

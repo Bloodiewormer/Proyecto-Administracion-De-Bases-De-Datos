@@ -39,7 +39,12 @@
         <h2 id="instancia-title" class="h5 mb-3">Información de la instancia</h2>
         <dl class="row mb-0">
             <div class="col-12 col-md-6"><dt class="text-body-secondary fw-normal">Servidor / host</dt><dd class="text-break" th:text="${estado.instancia?.host ?: 'No disponible'}"></dd></div>
+            <div class="col-12 col-md-6"><dt class="text-body-secondary fw-normal">Tipo de SGBD</dt>
+                <dd class="text-break" th:text="${estado.instancia == null ? 'No disponible'
+                    : (estado.instancia.edicion != null ? 'Oracle Database - ' + estado.instancia.edicion : 'Oracle Database')}"></dd>
+            </div>
             <div class="col-12 col-md-6"><dt class="text-body-secondary fw-normal">Versión de Oracle</dt><dd class="text-break" th:text="${estado.instancia?.version ?: 'No disponible'}"></dd></div>
+            <div class="col-12 col-md-6"><dt class="text-body-secondary fw-normal">Tipo de despliegue</dt><dd class="text-break" th:text="${estado.instancia?.tipoDespliegue ?: 'No disponible'}"></dd></div>
             <div class="col-12"><dt class="text-body-secondary fw-normal">Fecha y hora de inicio</dt>
                 <dd th:text="${estado.instancia?.inicio != null ? #temporals.format(estado.instancia.inicio, 'dd/MM/yyyy HH:mm:ss') : 'No disponible'}"></dd>
             </div>
@@ -47,17 +52,47 @@
         <ul class="small text-warning-emphasis mb-0 mt-3" th:if="${!avisos.instancia.isEmpty()}"><li th:each="aviso : ${avisos.instancia}" th:text="${aviso}"></li></ul>
     </section>
     <section class="card p-4 mb-4" aria-labelledby="base-title">
-        <h2 id="base-title" class="h5 mb-3">Base de datos</h2>
+        <h2 id="base-title" class="h5 mb-3">Bases de datos administradas</h2>
         <dl class="row mb-0">
             <div class="col-12 col-md-6"><dt class="text-body-secondary fw-normal">Nombre de la base de datos</dt><dd class="text-break" th:text="${estado.baseDatos?.base?.nombre ?: 'No disponible'}"></dd></div>
             <div class="col-12 col-md-6"><dt class="text-body-secondary fw-normal">Modo de apertura de la base</dt><dd class="text-break" th:text="${estado.baseDatos?.base?.modoApertura ?: 'No disponible'}"></dd></div>
-            <div class="col-12 col-md-6"><dt class="text-body-secondary fw-normal">Contenedor / PDB actual</dt><dd class="text-break" th:text="${estado.baseDatos?.contenedorActual?.nombre ?: 'No disponible'}"></dd></div>
-            <div class="col-12 col-md-6"><dt class="text-body-secondary fw-normal">Modo de apertura del contenedor</dt><dd class="text-break" th:text="${estado.baseDatos?.contenedorActual?.modoApertura ?: 'No disponible'}"></dd></div>
+            <div class="col-12"><dt class="text-body-secondary fw-normal">Base contenedora</dt>
+                <dd th:text="${estado.baseDatos?.base?.cdb == null ? 'No disponible'
+                    : (estado.baseDatos.base.cdb == 'YES' ? 'Sí, administra contenedores conectables' : 'No, base de datos única')}"></dd>
+            </div>
         </dl>
+        <p class="text-body-secondary mb-0" th:if="${estado.baseDatos?.contenedores == null or estado.baseDatos.contenedores.isEmpty()}">No disponible</p>
+        <div class="table-responsive" th:if="${estado.baseDatos?.contenedores != null and !estado.baseDatos.contenedores.isEmpty()}">
+            <table class="table align-middle">
+                <caption>Contenedores administrados por la instancia. La conexión configurada consulta el contenedor marcado como actual.</caption>
+                <thead><tr><th scope="col">Identificador</th><th scope="col">Nombre</th><th scope="col">Modo de apertura</th><th scope="col">Conexión</th></tr></thead>
+                <tbody><tr th:each="contenedor : ${estado.baseDatos.contenedores}">
+                    <th scope="row" class="fw-normal" th:text="${contenedor.conId != null ? contenedor.conId : 'No disponible'}"></th>
+                    <td class="text-break" th:text="${contenedor.nombre ?: 'No disponible'}"></td>
+                    <td th:text="${contenedor.modoApertura ?: 'No disponible'}"></td>
+                    <td>
+                        <span class="badge text-bg-primary" th:if="${contenedor.actual}">Actual</span>
+                        <span class="text-body-secondary" th:unless="${contenedor.actual}">No consultado</span>
+                    </td>
+                </tr></tbody>
+            </table>
+        </div>
         <ul class="small text-warning-emphasis mb-0 mt-3" th:if="${!avisos.base.isEmpty()}"><li th:each="aviso : ${avisos.base}" th:text="${aviso}"></li></ul>
     </section>
     <section class="card p-4" aria-labelledby="memoria-title">
-        <h2 id="memoria-title" class="h5 mb-3">Memoria SGA</h2>
+        <h2 id="memoria-title" class="h5 mb-3">Memoria de la instancia</h2>
+        <dl class="row mb-0">
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA asignada</dt>
+                <dd class="mb-1" th:text="${totalSgaTexto}"></dd>
+                <dd class="small text-body-secondary" th:if="${estado.memoria?.totalSgaBytes != null}"
+                    th:text="${estado.memoria.totalSgaBytes.toPlainString() + ' bytes'}"></dd>
+            </div>
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA utilizada</dt><dd th:text="${sgaUtilizadaTexto}"></dd></div>
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA libre</dt><dd th:text="${sgaLibreTexto}"></dd></div>
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">PGA asignada</dt><dd th:text="${pgaAsignadaTexto}"></dd></div>
+            <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">PGA utilizada</dt><dd th:text="${pgaUtilizadaTexto}"></dd></div>
+        </dl>
+        <h3 class="h6 mt-3">Componentes de la SGA</h3>
         <p class="text-body-secondary" th:if="${estado.memoria == null or estado.memoria.componentes.isEmpty()}">No disponible</p>
         <div class="table-responsive" th:if="${estado.memoria != null and !estado.memoria.componentes.isEmpty()}">
             <table class="table align-middle">
@@ -70,14 +105,6 @@
                     <td class="text-end text-nowrap" th:text="${componente.bytes != null ? componente.bytes.toPlainString() : 'No disponible'}"></td>
                 </tr></tbody>
             </table>
-        </div>
-        <div class="d-flex flex-wrap justify-content-between gap-2 mt-2">
-            <span class="fw-semibold">Total SGA de la instancia</span>
-            <div class="text-end">
-                <strong th:text="${totalSgaTexto}"></strong>
-                <small class="d-block text-body-secondary" th:if="${estado.memoria?.totalSgaBytes != null}"
-                       th:text="${estado.memoria.totalSgaBytes.toPlainString() + ' bytes'}"></small>
-            </div>
         </div>
         <ul class="small text-warning-emphasis mb-0 mt-3" th:if="${!avisos.memoria.isEmpty()}"><li th:each="aviso : ${avisos.memoria}" th:text="${aviso}"></li></ul>
     </section>
