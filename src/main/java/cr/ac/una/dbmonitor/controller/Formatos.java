@@ -20,13 +20,14 @@ public class Formatos {
         if (bytes == null) {
             return NO_DISPONIBLE;
         }
-        if (bytes.compareTo(GIB) >= 0) {
+        var abs = bytes.abs();
+        if (abs.compareTo(GIB) >= 0) {
             return bytes.divide(GIB, 2, RoundingMode.HALF_UP).toPlainString() + " GiB";
         }
-        if (bytes.compareTo(MIB) >= 0) {
+        if (abs.compareTo(MIB) >= 0) {
             return bytes.divide(MIB, 2, RoundingMode.HALF_UP).toPlainString() + " MiB";
         }
-        if (bytes.compareTo(KIB) >= 0) {
+        if (abs.compareTo(KIB) >= 0) {
             return bytes.divide(KIB, 2, RoundingMode.HALF_UP).toPlainString() + " KiB";
         }
         return bytes.toPlainString() + " bytes";
@@ -84,5 +85,16 @@ public class Formatos {
             case "USER" -> "Usuario";
             default -> tipo;
         };
+    }
+
+    public String porcentaje(BigDecimal valor) {
+        if (valor == null) {
+            return NO_DISPONIBLE;
+        }
+        return valor.setScale(2, RoundingMode.HALF_UP).toPlainString() + " %";
+    }
+
+    public String entero(Integer valor) {
+        return valor == null ? NO_DISPONIBLE : valor.toString();
     }
 }

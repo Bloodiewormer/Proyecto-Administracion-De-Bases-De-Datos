@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gestión del Almacenamiento | Oracle DB Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+<main class="container py-4 py-md-5">
+    <div th:replace="~{fragments/navegacion :: cabecera('almacenamiento')}"></div>
+    <h1 class="mb-4">Gestión del Almacenamiento</h1>
+
+    <div class="alert alert-warning" role="status" th:if="${!avisos.general.isEmpty()}">
+        <p class="mb-2" th:each="aviso : ${avisos.general}" th:text="${aviso}"></p>
+        <a class="alert-link" th:href="@{/conexion}">Configurar conexión</a>
+    </div>
+
+    <div class="alert alert-success alert-dismissible fade show" role="status" th:if="${snapshotExitoso}">
+        ¡Instantánea de almacenamiento registrada exitosamente en el historial comparativo!
+    </div>
+
+    <div class="alert alert-danger" role="alert" th:if="${errorSnapshot}" th:text="${errorSnapshot}"></div>
+
+    <!-- Tarjetas métricas de resumen global (Tamaño actual de la base de datos) -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-3"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Tamaño total asignado</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.memoria(almacenamiento.resumen?.tamanoTotalBytes)}"></p>
+            <p class="small text-body-secondary mb-0"
+               th:if="${almacenamiento.resumen?.tamanoTotalBytes != null}"
+               th:text="${formatos.numero(almacenamiento.resumen.tamanoTotalBytes) + ' bytes'}"></p>
+        </section></div>
+        <div class="col-12 col-md-3"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Espacio utilizado</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.memoria(almacenamiento.resumen?.usadoBytes)}"></p>
+            <p class="small text-body-secondary mb-0"
+               th:if="${almacenamiento.resumen?.porcentajeUso != null}"
+               th:text="'Ocupación global: ' + ${formatos.porcentaje(almacenamiento.resumen.porcentajeUso)}"></p>
+        </section></div>
+        <div class="col-12 col-md-3"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Espacio libre disponible</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.memoria(almacenamiento.resumen?.libreBytes)}"></p>
+            <p class="small text-body-secondary mb-0"
+               th:if="${almacenamiento.resumen?.libreBytes != null}"
+               th:text="${formatos.numero(almacenamiento.resumen.libreBytes) + ' bytes'}"></p>
+        </section></div>
+        <div class="col-12 col-md-3"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Estructura física</h2>
+            <p class="fs-5 mb-0"
+               th:text="${(almacenamiento.resumen?.cantidadTablespaces ?: 0) + ' tablespaces / ' + (almacenamiento.resumen?.cantidadArchivos ?: 0) + ' archivos'}"></p>
+            <p class="small text-body-secondary mb-0">Datafiles, tempfiles y redo logs</p>
+        </section></div>
+    </div>
+
+    <!-- Sección 1: Tablespaces (Oracle) -->
+    <section class="card p-4 mb-4" aria-labelledby="tablespaces-title">
+        <h2 id="tablespaces-title" class="h5 mb-2">Espacio utilizado y disponible en Tablespaces</h2>
+        <p class="text-body-secondary small">Supervisión de espacio físico y distribución por tablespace.</p>
+
+        <p class="text-body-secondary mb-0" th:if="${almacenamiento.tablespaces == null or almacenamiento.tablespaces.isEmpty()}">
+            No hay información de tablespaces disponible.
+        </p>
+
+        <div class="table-responsive" th:if="${almacenamiento.tablespaces != null and !almacenamiento.tablespaces.isEmpty()}">
+            <table class="table align-middle">
+                <caption>Lista de tablespaces de la base de datos Oracle con cálculo de espacio asignado, utilizado, libre y porcentaje de utilización.</caption>
+                <thead><tr>
+                    <th scope="col">Tablespace</th>
+                    <th scope="col">Tipo</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Gestión</th>
+                    <th scope="col" class="text-end">Asignado</th>
+                    <th scope="col" class="text-end">Usado</th>
+                    <th scope="col" class="text-end">Libre</th>
+                    <th scope="col" class="text-end">Tamaño máx.</th>
+                    <th scope="col" style="min-width: 140px;">% Uso</th>
+                </tr></thead>
+                <tbody><tr th:each="ts : ${almacenamiento.tablespaces}">
+                    <th scope="row" class="fw-normal text-nowrap" th:text="${formatos.texto(ts.nombre)}"></th>
+                    <td>
+                        <span class="badge text-bg-light border" th:text="${formatos.texto(ts.contenido)}"></span>
+                    </td>
+                    <td>
+                        <span class="badge"
+                              th:classappend="${ts.estado == 'ONLINE'} ? 'text-bg-success' : 'text-bg-secondary'"
+                              th:text="${formatos.texto(ts.estado)}"></span>
+                    </td>
+                    <td class="small text-body-secondary"
+                        th:text="${formatos.texto(ts.gestionExtensiones) + ' / ' + formatos.texto(ts.gestionSegmentos)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(ts.bytesTotales)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(ts.bytesUsados)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(ts.bytesLibres)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(ts.bytesMaximos)}"></td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="small fw-semibold" style="width: 48px;"
+                                  th:text="${formatos.porcentaje(ts.porcentajeUso)}"></span>
+                            <div class="progress flex-grow-1" role="progressbar"
+                                 th:attr="aria-valuenow=${ts.porcentajeUso != null ? ts.porcentajeUso : 0}"
+                                 aria-valuemin="0" aria-valuemax="100" style="height: 10px;">
+                                <div class="progress-bar"
+                                     th:classappend="${ts.porcentajeUso != null && ts.porcentajeUso.doubleValue() > 90 ? 'bg-danger' : (ts.porcentajeUso != null && ts.porcentajeUso.doubleValue() > 75 ? 'bg-warning' : 'bg-success')}"
+                                     th:style="'width: ' + (${ts.porcentajeUso != null ? (ts.porcentajeUso.doubleValue() > 100 ? 100 : ts.porcentajeUso) : 0}) + '%;'">
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr></tbody>
+            </table>
+        </div>
+        <ul class="small text-warning-emphasis mb-0 mt-3" th:if="${!avisos.tablespaces.isEmpty()}">
+            <li th:each="aviso : ${avisos.tablespaces}" th:text="${aviso}"></li>
+        </ul>
+    </section>
+
+    <!-- Sección 2: Archivos de datos (Datafiles y Tempfiles) -->
+    <section class="card p-4 mb-4" aria-labelledby="archivos-title">
+        <h2 id="archivos-title" class="h5 mb-2">Archivos de datos (Datafiles y Tempfiles)</h2>
+        <p class="text-body-secondary small">Inventario de archivos del sistema operativo asociados a la base de datos Oracle.</p>
+
+        <p class="text-body-secondary mb-0" th:if="${almacenamiento.archivos == null or almacenamiento.archivos.isEmpty()}">
+            No hay información de archivos de datos disponible.
+        </p>
+
+        <div class="table-responsive" th:if="${almacenamiento.archivos != null and !almacenamiento.archivos.isEmpty()}">
+            <table class="table align-middle">
+                <caption>Archivos de datos de almacenamiento permanente y temporal.</caption>
+                <thead><tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Nombre de archivo (ruta física)</th>
+                    <th scope="col">Tablespace</th>
+                    <th scope="col">Tipo</th>
+                    <th scope="col" class="text-end">Tamaño actual</th>
+                    <th scope="col" class="text-end">Tamaño máx.</th>
+                    <th scope="col">Autoextensión</th>
+                    <th scope="col">Estado</th>
+                </tr></thead>
+                <tbody><tr th:each="arch : ${almacenamiento.archivos}">
+                    <th scope="row" class="fw-normal text-nowrap" th:text="${formatos.entero(arch.fileId)}"></th>
+                    <td class="text-break"><code class="small" th:text="${formatos.texto(arch.nombreArchivo)}"></code></td>
+                    <td class="text-nowrap" th:text="${formatos.texto(arch.tablespace)}"></td>
+                    <td>
+                        <span class="badge"
+                              th:classappend="${arch.tipo == 'DATA'} ? 'text-bg-primary' : 'text-bg-info text-dark'"
+                              th:text="${arch.tipo == 'DATA' ? 'Datafile' : 'Tempfile'}"></span>
+                    </td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(arch.bytes)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(arch.maxBytes)}"></td>
+                    <td>
+                        <span class="badge"
+                              th:classappend="${arch.autoextensible == 'YES'} ? 'text-bg-success' : 'text-bg-secondary'"
+                              th:text="${arch.autoextensible == 'YES' ? 'Sí' : 'No'}"></span>
+                        <span class="small text-body-secondary ms-1"
+                              th:if="${arch.autoextensible == 'YES' and arch.incremento != null and arch.incremento > 0}"
+                              th:text="'(+' + ${formatos.numero(arch.incremento)} + ' blk)'"></span>
+                    </td>
+                    <td class="text-nowrap" th:text="${formatos.texto(arch.estado)}"></td>
+                </tr></tbody>
+            </table>
+        </div>
+        <ul class="small text-warning-emphasis mb-0 mt-3" th:if="${!avisos.archivos.isEmpty()}">
+            <li th:each="aviso : ${avisos.archivos}" th:text="${aviso}"></li>
+        </ul>
+    </section>
+
+    <!-- Sección 3: Objetos con mayor consumo de almacenamiento -->
+    <section class="card p-4 mb-4" aria-labelledby="objetos-title">
+        <h2 id="objetos-title" class="h5 mb-2">Objetos con mayor consumo de almacenamiento</h2>
+        <p class="text-body-secondary small">Identificación de tablas, índices y segmentos con mayor demanda de espacio físico en disco.</p>
+
+        <form class="row g-3 align-items-end mb-4" method="get" th:action="@{/almacenamiento}">
+            <div class="col-12 col-md-5">
+                <label class="form-label" for="tipo">Filtrar por tipo de objeto</label>
+                <select class="form-select" id="tipo" name="tipo">
+                    <option th:each="f : ${filtros}" th:value="${f.name()}"
+                            th:text="${f.etiqueta}" th:selected="${f == almacenamiento.filtroTipo}"></option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="top">Filas por tabla (entre 5 y 50)</label>
+                <input class="form-control" id="top" name="top" type="number" min="5" max="50"
+                       th:value="${almacenamiento.top}">
+            </div>
+            <div class="col-12 col-md-3">
+                <button class="btn btn-primary w-100 py-2" type="submit">Aplicar filtros</button>
+            </div>
+        </form>
+
+        <p class="text-body-secondary mb-0" th:if="${almacenamiento.objetos == null or almacenamiento.objetos.isEmpty()}">
+            No se encontraron objetos registrados en el diccionario de datos para los criterios seleccionados.
+        </p>
+
+        <div class="table-responsive" th:if="${almacenamiento.objetos != null and !almacenamiento.objetos.isEmpty()}">
+            <table class="table align-middle">
+                <caption>Segmentos de base de datos ordenados descendentemente por espacio físico ocupado en disco.</caption>
+                <thead><tr>
+                    <th scope="col">Objeto</th>
+                    <th scope="col">Propietario</th>
+                    <th scope="col">Tipo</th>
+                    <th scope="col">Tablespace</th>
+                    <th scope="col" class="text-end">Tamaño</th>
+                    <th scope="col" class="text-end">Bytes</th>
+                    <th scope="col" class="text-end">Bloques</th>
+                    <th scope="col" class="text-end">Extensiones</th>
+                </tr></thead>
+                <tbody><tr th:each="obj : ${almacenamiento.objetos}">
+                    <th scope="row" class="fw-normal text-nowrap">
+                        <span class="fw-semibold" th:text="${formatos.texto(obj.nombre)}"></span>
+                        <span class="text-body-secondary small" th:if="${obj.particion != null}"
+                              th:text="' (' + ${obj.particion} + ')'"></span>
+                    </th>
+                    <td class="text-nowrap" th:text="${formatos.texto(obj.propietario)}"></td>
+                    <td>
+                        <span class="badge text-bg-light border" th:text="${formatos.texto(obj.tipo)}"></span>
+                    </td>
+                    <td class="text-nowrap" th:text="${formatos.texto(obj.tablespace)}"></td>
+                    <td class="text-end text-nowrap fw-semibold" th:text="${formatos.memoria(obj.bytes)}"></td>
+                    <td class="text-end text-nowrap text-body-secondary small" th:text="${formatos.numero(obj.bytes)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.numero(obj.bloques)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.numero(obj.extensiones)}"></td>
+                </tr></tbody>
+            </table>
+        </div>
+        <ul class="small text-warning-emphasis mb-0 mt-3" th:if="${!avisos.objetos.isEmpty()}">
+            <li th:each="aviso : ${avisos.objetos}" th:text="${aviso}"></li>
+        </ul>
+    </section>
+
+    <!-- Sección 4: Crecimiento de la base de datos -->
+    <section class="card p-4 mb-4" aria-labelledby="crecimiento-title">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+            <div>
+                <h2 id="crecimiento-title" class="h5 mb-1">Crecimiento y tendencia de almacenamiento</h2>
+                <p class="text-body-secondary small mb-0">Mecanismo para registrar y comparar la evolución del almacenamiento en el tiempo.</p>
+            </div>
+            <form method="post" th:action="@{/almacenamiento/snapshot}">
+                <button type="submit" class="btn btn-primary btn-sm px-3 py-2">
+                    Registrar medición actual
+                </button>
+            </form>
+        </div>
+
+        <h3 class="h6 text-body-secondary mt-2 mb-3">Historial de mediciones registradas</h3>
+        <p class="text-body-secondary mb-0"
+           th:if="${almacenamiento.crecimiento?.mediciones == null or almacenamiento.crecimiento.mediciones.isEmpty()}">
+            Aún no se han registrado mediciones en el historial. Utilice el botón "Registrar medición actual" para iniciar el seguimiento.
+        </p>
+
+        <div class="table-responsive mb-4"
+             th:if="${almacenamiento.crecimiento?.mediciones != null and !almacenamiento.crecimiento.mediciones.isEmpty()}">
+            <table class="table align-middle">
+                <caption>Registro cronológico de snapshots de almacenamiento comparando variación y tendencia entre tomas.</caption>
+                <thead><tr>
+                    <th scope="col">Fecha y hora</th>
+                    <th scope="col" class="text-end">Tamaño total BD</th>
+                    <th scope="col" class="text-end">Espacio usado</th>
+                    <th scope="col" class="text-end">Espacio libre</th>
+                    <th scope="col" class="text-end">Variación</th>
+                    <th scope="col" class="text-end">% Crecimiento</th>
+                </tr></thead>
+                <tbody><tr th:each="med : ${almacenamiento.crecimiento.mediciones}">
+                    <th scope="row" class="fw-normal text-nowrap"
+                        th:text="${med.fecha != null ? #temporals.format(med.fecha, 'dd/MM/yyyy HH:mm:ss') : 'No disponible'}"></th>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(med.tamanoTotalBytes)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(med.usadoBytes)}"></td>
+                    <td class="text-end text-nowrap" th:text="${formatos.memoria(med.libreBytes)}"></td>
+                    <td class="text-end text-nowrap">
+                        <span th:if="${med.variacionBytes == null or med.variacionBytes.signum() == 0}" class="text-body-secondary">—</span>
+                        <span th:if="${med.variacionBytes != null and med.variacionBytes.signum() > 0}"
+                              class="text-danger fw-semibold"
+                              th:text="'+' + ${formatos.memoria(med.variacionBytes)}"></span>
+                        <span th:if="${med.variacionBytes != null and med.variacionBytes.signum() < 0}"
+                              class="text-success fw-semibold"
+                              th:text="${formatos.memoria(med.variacionBytes)}"></span>
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <span th:if="${med.variacionPorcentual == null or med.variacionPorcentual.signum() == 0}" class="text-body-secondary">—</span>
+                        <span th:if="${med.variacionPorcentual != null and med.variacionPorcentual.signum() > 0}"
+                              class="badge text-bg-warning"
+                              th:text="'+' + ${formatos.porcentaje(med.variacionPorcentual)}"></span>
+                        <span th:if="${med.variacionPorcentual != null and med.variacionPorcentual.signum() < 0}"
+                              class="badge text-bg-success"
+                              th:text="${formatos.porcentaje(med.variacionPorcentual)}"></span>
+                    </td>
+                </tr></tbody>
+            </table>
+        </div>
+
+        <!-- Registros históricos AWR de Oracle (si la instancia cuenta con snapshots de Diagnostic Pack) -->
+        <div th:if="${almacenamiento.crecimiento?.historicoAwr != null and !almacenamiento.crecimiento.historicoAwr.isEmpty()}" class="mt-3">
+            <h3 class="h6 text-body-secondary mb-2">Histórico AWR detectado en Oracle (DBA_HIST_TBSPC_SPACE_USAGE)</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <caption>Muestras históricas recolectadas automáticamente por el repositorio AWR de Oracle Database.</caption>
+                    <thead><tr>
+                        <th scope="col">Fecha AWR</th>
+                        <th scope="col">Tablespace</th>
+                        <th scope="col" class="text-end">Espacio usado</th>
+                        <th scope="col" class="text-end">Tamaño total</th>
+                    </tr></thead>
+                    <tbody><tr th:each="awr : ${almacenamiento.crecimiento.historicoAwr}">
+                        <td th:text="${awr.fecha != null ? #temporals.format(awr.fecha, 'dd/MM/yyyy HH:mm') : 'No disponible'}"></td>
+                        <td th:text="${formatos.texto(awr.tablespace)}"></td>
+                        <td class="text-end" th:text="${formatos.memoria(awr.usadoBytes)}"></td>
+                        <td class="text-end" th:text="${formatos.memoria(awr.tamanoBytes)}"></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Mecanismo documentado: Acordeón explicativo con script SQL para automatización -->
+        <div class="accordion mt-3" id="accordionDocCrecimiento">
+            <div class="accordion-item">
+                <h3 class="accordion-header" id="headingDoc">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#collapseDoc" aria-expanded="false" aria-controls="collapseDoc">
+                        Mecanismo documentado: Registro automático de crecimiento en Oracle (Scripts DBA)
+                    </button>
+                </h3>
+                <div id="collapseDoc" class="accordion-collapse collapse" aria-labelledby="headingDoc"
+                     data-bs-parent="#accordionDocCrecimiento">
+                    <div class="accordion-body">
+                        <p class="small text-body-secondary">
+                            Para entornos de producción donde se requiere registrar el crecimiento histórico directamente
+                            en el motor Oracle sin depender exclusivamente del sondeo externo, se documenta el mecanismo
+                            estándar de administración mediante una tabla de historial y un job programado con <code>DBMS_SCHEDULER</code>:
+                        </p>
+                        <pre class="bg-light p-3 rounded border small"><code>-- 1. Tabla para almacenar snapshots periódicos de almacenamiento
+CREATE TABLE HISTORIAL_CRECIMIENTO_BD (
+    ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    FECHA TIMESTAMP DEFAULT SYSTIMESTAMP,
+    BYTES_DATAFILES NUMBER,
+    BYTES_TEMPFILES NUMBER,
+    BYTES_REDO NUMBER DEFAULT 0,
+    BYTES_USADOS NUMBER,
+    BYTES_LIBRES NUMBER
+);
+
+-- 2. Procedimiento administrativo para recolectar métricas
+CREATE OR REPLACE PROCEDURE REGISTRAR_CRECIMIENTO_ALMACENAMIENTO AS
+BEGIN
+    INSERT INTO HISTORIAL_CRECIMIENTO_BD (BYTES_DATAFILES, BYTES_TEMPFILES, BYTES_REDO, BYTES_USADOS, BYTES_LIBRES)
+    SELECT
+        (SELECT NVL(SUM(BYTES), 0) FROM DBA_DATA_FILES),
+        (SELECT NVL(SUM(BYTES), 0) FROM DBA_TEMP_FILES),
+        (SELECT NVL(SUM(BYTES * MEMBERS), NVL(SUM(BYTES), 0)) FROM V$LOG),
+        (SELECT NVL(SUM(BYTES), 0) FROM DBA_SEGMENTS),
+        (SELECT NVL(SUM(BYTES), 0) FROM DBA_FREE_SPACE)
+    FROM DUAL;
+    COMMIT;
+END;
+/
+
+-- 3. Programación automática diaria con DBMS_SCHEDULER
+BEGIN
+    DBMS_SCHEDULER.CREATE_JOB (
+        job_name        => 'JOB_HISTORIAL_ALMACENAMIENTO',
+        job_type        => 'PLSQL_BLOCK',
+        job_action      => 'BEGIN REGISTRAR_CRECIMIENTO_ALMACENAMIENTO; END;',
+        start_date      => SYSTIMESTAMP,
+        repeat_interval => 'FREQ=DAILY; BYHOUR=0; BYMINUTE=0; BYSECOND=0',
+        enabled         => TRUE,
+        comments        => 'Captura diaria del crecimiento de la base de datos'
+    );
+END;
+/</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <ul class="small text-warning-emphasis mb-0 mt-3" th:if="${!avisos.crecimiento.isEmpty()}">
+            <li th:each="aviso : ${avisos.crecimiento}" th:text="${aviso}"></li>
+        </ul>
+    </section>
+
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn2vpmcHQbPvGgPz6g5PzPvW5g6r5G2/b9b5l4Q8v6"
+        crossorigin="anonymous"></script>
+</body>
+</html>
