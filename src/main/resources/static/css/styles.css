@@ -203,9 +203,17 @@ p { margin-bottom: 1rem; }
 .home-page main > .row > div { width: 61%; padding-inline: 0; }
 .home-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; padding-left: 0 !important; padding-right: 2rem !important; }
 .home-card h1 { max-width: 580px; font-size: clamp(2.6rem, 4.6vw, 4.4rem); line-height: 1.07; }
-.home-card .lead { max-width: 430px; color: #c4c4c4; }
-.home-card .text-body-secondary { max-width: 400px; font-size: .94rem; }
+.home-page .home-card .lead, .home-page .home-card .text-body-secondary { width: 100%; max-width: 580px; }
+.home-card .lead { color: #c4c4c4; }
+.home-card .text-body-secondary { font-size: .94rem; }
 .home-card .btn { margin-top: .5rem; min-height: 46px; }
+.home-page .home-actions { display: flex; flex-direction: row; align-items: center; gap: 1.5rem; }
+.home-page .home-actions .btn { margin-top: 0; flex-shrink: 0; }
+.home-page .home-meme { display: block; width: 200px; max-width: 100%; min-width: 0; height: auto; border: 0; border-radius: 10px; box-shadow: none; animation: none; }
+@media (max-width: 767px) {
+    .home-page .home-actions { flex-direction: column; align-items: flex-start; }
+    .home-page .home-actions .btn { max-width: 100%; }
+}
 .connection-page .data-flow { height: 900px; max-height: 100vh; }
 .connection-page .flow-blob { opacity: .4; }
 .connection-page .flow-blob-burgundy { top: 10%; right: 4%; }
