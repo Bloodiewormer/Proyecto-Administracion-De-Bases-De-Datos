@@ -4,11 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Estado general | Oracle DB Monitor</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     <link rel="stylesheet" th:href="@{/css/styles.css}">
 </head>
-<body>
+<body class="status-page">
 <main class="container py-4 py-md-5">
     <div th:replace="~{fragments/navegacion :: cabecera('estado')}"></div>
     <h1 class="mb-4">Estado general</h1>
@@ -16,18 +14,18 @@
         <p class="mb-2" th:each="aviso : ${avisos.general}" th:text="${aviso}"></p>
         <a class="alert-link" th:href="@{/conexion}">Configurar conexión</a>
     </div>
-    <div class="row g-3 mb-4">
-        <div class="col-12 col-md-4"><section class="card h-100 p-4">
+    <div class="row g-3 mb-4 status-metrics">
+        <div class="col-12 col-md-4"><section class="card metric-card h-100 p-4">
             <h2 class="h6 text-body-secondary">Instancia</h2>
             <p class="fs-4 text-break mb-0" th:text="${estado.instancia?.nombre ?: 'No disponible'}"></p>
         </section></div>
-        <div class="col-12 col-md-4"><section class="card h-100 p-4">
+        <div class="col-12 col-md-4"><section class="card metric-card h-100 p-4">
             <h2 class="h6 text-body-secondary">Estado</h2>
             <div><span class="badge rounded-pill fs-6"
                 th:classappend="${estado.instancia?.estado == 'OPEN'} ? 'text-bg-success' : 'text-bg-secondary'"
                 th:text="${estado.instancia?.estado ?: 'No disponible'}"></span></div>
         </section></div>
-        <div class="col-12 col-md-4"><section class="card h-100 p-4">
+        <div class="col-12 col-md-4"><section class="card metric-card h-100 p-4">
             <h2 class="h6 text-body-secondary">Uptime</h2>
             <p class="fs-5 mb-0" th:text="${formatos.duracion(estado.uptime)}"></p>
         </section></div>
@@ -76,11 +74,11 @@
         </div>
         <ul class="small text-warning-emphasis mb-0 mt-3" th:if="${!avisos.base.isEmpty()}"><li th:each="aviso : ${avisos.base}" th:text="${aviso}"></li></ul>
     </section>
-    <section class="card p-4" aria-labelledby="memoria-title">
+    <section class="card memory-card p-4" aria-labelledby="memoria-title">
         <h2 id="memoria-title" class="h5 mb-3">Memoria de la instancia</h2>
         <dl class="row mb-0">
             <div class="col-12 col-md-4"><dt class="text-body-secondary fw-normal">SGA asignada</dt>
-                <dd class="mb-1" th:text="${formatos.memoria(estado.memoria?.totalSgaBytes)}"></dd>
+                <dd class="mb-1 sga-total" th:text="${formatos.memoria(estado.memoria?.totalSgaBytes)}"></dd>
                 <dd class="small text-body-secondary" th:if="${estado.memoria?.totalSgaBytes != null}"
                     th:text="${estado.memoria.totalSgaBytes.toPlainString() + ' bytes'}"></dd>
             </div>
