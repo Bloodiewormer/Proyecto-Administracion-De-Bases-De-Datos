@@ -21,8 +21,11 @@ public class RespaldoRepository {
             + " FROM V$RMAN_BACKUP_JOB_DETAILS WHERE STATUS = 'COMPLETED' "
             + "ORDER BY END_TIME DESC) WHERE ROWNUM <= 1";
     private static final String MODO_LOG = "SELECT LOG_MODE FROM V$DATABASE";
+    private static final String CONTENEDOR = "SELECT SYS_CONTEXT('USERENV', 'CON_NAME') AS NOMBRE, "
+            + "SYS_CONTEXT('USERENV', 'CON_ID') AS ID FROM DUAL";
     private static final String VISTA_RESPALDOS = "V$RMAN_BACKUP_JOB_DETAILS";
     private static final String VISTA_BASE = "V$DATABASE";
+    private static final String VISTA_DUAL = "DUAL";
 
     private final ConexionOracleService conexion;
 
@@ -35,7 +38,7 @@ public class RespaldoRepository {
         try {
             jdbc = conexion.obtenerJdbcTemplate();
         } catch (IllegalStateException ex) {
-            return new RespaldoDto(null, null, null, null, cantidad,
+            return new RespaldoDto(null, null, null, null, null, cantidad,
                     List.of("No hay conexión configurada. Conecte una instancia Oracle."));
         }
         var avisos = new ArrayList<String>();
@@ -45,7 +48,10 @@ public class RespaldoRepository {
                 () -> jdbc.query(ULTIMO_EXITOSO, (rs, row) -> respaldo(rs)), avisos), VISTA_RESPALDOS, avisos);
         var modoLog = ConsultasOracle.unica(ConsultasOracle.leerTolerandoVacio(VISTA_BASE,
                 () -> jdbc.query(MODO_LOG, (rs, row) -> rs.getString("LOG_MODE")), avisos), VISTA_BASE, avisos);
-        return new RespaldoDto(ultimoExitoso, historial, modoLog, null, cantidad, avisos);
+        var contenedor = ConsultasOracle.unica(ConsultasOracle.leerTolerandoVacio(VISTA_DUAL,
+                () -> jdbc.query(CONTENEDOR, (rs, row) -> new RespaldoDto.Contenedor(rs.getString("NOMBRE"),
+                        rs.getInt("ID") > 1)), avisos), VISTA_DUAL, avisos);
+        return new RespaldoDto(ultimoExitoso, historial, modoLog, contenedor, null, cantidad, avisos);
     }
 
     private RespaldoDto.Respaldo respaldo(ResultSet rs) throws SQLException {
