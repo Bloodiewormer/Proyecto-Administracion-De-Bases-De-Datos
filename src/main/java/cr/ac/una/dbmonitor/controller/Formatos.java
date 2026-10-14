@@ -1,5 +1,6 @@
 package cr.ac.una.dbmonitor.controller;
 
+import cr.ac.una.dbmonitor.dto.NivelRespaldo;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -96,5 +97,49 @@ public class Formatos {
 
     public String entero(Integer valor) {
         return valor == null ? NO_DISPONIBLE : valor.toString();
+    }
+
+    public String tipoRespaldo(String tipo) {
+        if (tipo == null) {
+            return NO_DISPONIBLE;
+        }
+        return switch (tipo) {
+            case "DB FULL" -> "Base de datos completa";
+            case "DB INCR" -> "Base de datos incremental";
+            case "DATAFILE FULL" -> "Archivos de datos completos";
+            case "DATAFILE INCR" -> "Archivos de datos incrementales";
+            case "ARCHIVELOG" -> "Registros archivados (archivelog)";
+            case "CONTROLFILE" -> "Archivo de control";
+            case "SPFILE" -> "Archivo de parámetros (SPFILE)";
+            case "RECVR AREA" -> "Área de recuperación";
+            default -> tipo;
+        };
+    }
+
+    public String estadoRespaldo(String estado) {
+        if (estado == null) {
+            return NO_DISPONIBLE;
+        }
+        return switch (estado) {
+            case "COMPLETED" -> "Completado";
+            case "COMPLETED WITH WARNINGS" -> "Completado con advertencias";
+            case "COMPLETED WITH ERRORS" -> "Completado con errores";
+            case "FAILED" -> "Fallido";
+            case "RUNNING" -> "En ejecución";
+            case "RUNNING WITH WARNINGS" -> "En ejecución con advertencias";
+            case "RUNNING WITH ERRORS" -> "En ejecución con errores";
+            default -> estado;
+        };
+    }
+
+    public String nivelRespaldo(NivelRespaldo nivel) {
+        if (nivel == null) {
+            return NO_DISPONIBLE;
+        }
+        return switch (nivel) {
+            case ADECUADO -> "Adecuado";
+            case ADVERTENCIA -> "Advertencia";
+            case RIESGO -> "Riesgo";
+        };
     }
 }
