@@ -255,6 +255,11 @@ p { margin-bottom: 1rem; }
 .nav-link { display: block; padding: .55rem .85rem; border: 1px solid transparent; border-radius: .35rem; color: #bcbcbc; font-size: .84rem; text-decoration: none; }
 .nav-link:hover { color: #f2f2f2; background: #161616; }
 .nav-pills .nav-link.active { background: #8b1e2d; color: #f2f2f2; border-color: #9e3544; }
+/* Pestañas internas de un módulo: subrayado en lugar de relleno para no confundirlas con el menú principal. */
+.section-tabs { gap: .25rem; border-bottom: 1px solid #292929; }
+.section-tabs .nav-link { margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; }
+.section-tabs .nav-link:hover { background: transparent; border-bottom-color: #494949; }
+.section-tabs .nav-link.active { color: #f2f2f2; border-bottom-color: #8b1e2d; }
 .status-page h1 { font-size: 1.8rem; }
 .metric-card { min-height: 138px; border-top: 2px solid #65303a; display: flex; flex-direction: column; justify-content: space-between; }
 .metric-card h2 { font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 1.25rem; }

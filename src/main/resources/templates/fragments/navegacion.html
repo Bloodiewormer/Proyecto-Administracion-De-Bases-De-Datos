@@ -28,6 +28,11 @@
                    th:classappend="${seccion == 'respaldo'} ? 'active' : ''"
                    th:attr="aria-current=${seccion == 'respaldo'} ? 'page' : null">Respaldo</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" th:href="@{/auditoria}"
+                   th:classappend="${seccion == 'auditoria'} ? 'active' : ''"
+                   th:attr="aria-current=${seccion == 'auditoria'} ? 'page' : null">Auditoría</a>
+            </li>
         </ul>
     </nav>
 </header>

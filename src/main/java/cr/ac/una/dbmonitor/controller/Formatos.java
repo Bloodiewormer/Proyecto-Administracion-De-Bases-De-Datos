@@ -142,4 +142,79 @@ public class Formatos {
             case RIESGO -> "Riesgo";
         };
     }
+
+    public String siNo(boolean valor) {
+        return valor ? "Sí" : "No";
+    }
+
+    public String estadoCuenta(String estado) {
+        if (estado == null) {
+            return NO_DISPONIBLE;
+        }
+        return switch (estado) {
+            case "OPEN" -> "Abierta";
+            case "OPEN & IN ROLLOVER" -> "Abierta (cambio gradual de contraseña)";
+            case "LOCKED" -> "Bloqueada";
+            case "LOCKED(TIMED)" -> "Bloqueada temporalmente por intentos fallidos";
+            case "EXPIRED" -> "Contraseña expirada";
+            case "EXPIRED(GRACE)" -> "Contraseña en periodo de gracia";
+            case "EXPIRED & LOCKED" -> "Contraseña expirada y cuenta bloqueada";
+            case "EXPIRED & LOCKED(TIMED)" -> "Contraseña expirada y bloqueo temporal";
+            case "EXPIRED(GRACE) & LOCKED" -> "Periodo de gracia y cuenta bloqueada";
+            case "EXPIRED(GRACE) & LOCKED(TIMED)" -> "Periodo de gracia y bloqueo temporal";
+            default -> estado;
+        };
+    }
+
+    public String claseEstadoCuenta(String estado) {
+        if (estado == null) {
+            return "text-bg-secondary";
+        }
+        if (estado.startsWith("OPEN")) {
+            return "text-bg-success";
+        }
+        return estado.contains("LOCKED") ? "text-bg-danger" : "text-bg-warning";
+    }
+
+    public String autenticacionUsuario(String tipo) {
+        if (tipo == null) {
+            return NO_DISPONIBLE;
+        }
+        return switch (tipo) {
+            case "PASSWORD" -> "Contraseña";
+            case "EXTERNAL" -> "Externa (sistema operativo)";
+            case "GLOBAL" -> "Global (servicio de directorio)";
+            case "NONE" -> "Sin inicio de sesión (solo esquema)";
+            default -> tipo;
+        };
+    }
+
+    public String autenticacionRol(String tipo) {
+        if (tipo == null) {
+            return NO_DISPONIBLE;
+        }
+        return switch (tipo) {
+            case "NONE" -> "No requiere contraseña";
+            case "PASSWORD" -> "Protegido con contraseña";
+            case "EXTERNAL" -> "Externa (sistema operativo)";
+            case "GLOBAL" -> "Global (servicio de directorio)";
+            case "APPLICATION" -> "Activado por un paquete de aplicación";
+            default -> tipo;
+        };
+    }
+
+    public String alcanceCuenta(boolean comun) {
+        return comun ? "Común (todos los contenedores)" : "Local (este contenedor)";
+    }
+
+    public String tipoBeneficiario(String tipo) {
+        if (tipo == null) {
+            return NO_DISPONIBLE;
+        }
+        return switch (tipo) {
+            case "USUARIO" -> "Usuario";
+            case "ROL" -> "Rol";
+            default -> "Otro (por ejemplo PUBLIC)";
+        };
+    }
 }

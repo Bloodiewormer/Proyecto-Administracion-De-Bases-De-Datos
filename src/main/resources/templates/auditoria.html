@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Auditoría | Oracle DB Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+<main class="container py-4 py-md-5" th:with="f=${auditoria.filtros}, ctx=${auditoria.contexto}">
+    <div th:replace="~{fragments/navegacion :: cabecera('auditoria')}"></div>
+    <h1 class="mb-4">Auditoría</h1>
+    <div class="alert alert-warning" role="status" th:if="${!avisos.isEmpty()}">
+        <p class="mb-2" th:each="aviso : ${avisos}" th:text="${aviso}"></p>
+        <p class="mb-2" th:if="${faltanPermisos}">La cuenta conectada no puede leer parte del diccionario de datos.
+            Para este módulo necesita el rol <code>SELECT_CATALOG_ROLE</code> o el privilegio
+            <code>SELECT ANY DICTIONARY</code>. La información afectada se muestra como «No disponible»,
+            no como ausencia de resultados.</p>
+        <a class="alert-link" th:href="@{/conexion}">Configurar conexión</a>
+    </div>
+
+    <p class="text-body-secondary small" th:if="${ctx != null}"
+       th:text="'Contenedor consultado: ' + ${ctx.contenedor}
+           + (${ctx.esPdb} ? ' (base de datos conectable)' : ' (contenedor raíz o base única)')
+           + ' · Cuenta de la sesión: ' + ${ctx.usuarioSesion}"></p>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Usuarios registrados</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.entero(auditoria.resumen?.usuarios)}"></p>
+            <p class="small text-body-secondary mb-0" th:if="${auditoria.resumen != null}"
+               th:text="${auditoria.resumen.usuariosOrganizacion} + ' creados por la organización'"></p>
+        </section></div>
+        <div class="col-12 col-md-6"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Cuentas bloqueadas o expiradas</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.entero(auditoria.resumen?.cuentasRestringidas)}"></p>
+        </section></div>
+        <div class="col-12 col-md-6"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Roles definidos</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.entero(auditoria.resumen?.roles)}"></p>
+        </section></div>
+        <div class="col-12 col-md-6"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Objetos inválidos</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.entero(auditoria.resumen?.objetosInvalidos)}"></p>
+        </section></div>
+    </div>
+
+    <nav class="mb-4" aria-label="Secciones de auditoría">
+        <ul class="nav section-tabs">
+            <li class="nav-item" th:each="v : ${vistas}">
+                <a class="nav-link" th:href="@{/auditoria(vista=${v.name()}, origen=${f.origen.name()})}"
+                   th:classappend="${v == f.vista} ? 'active' : ''"
+                   th:attr="aria-current=${v == f.vista} ? 'page' : null" th:text="${v.etiqueta}"></a>
+            </li>
+        </ul>
+    </nav>
+
+    <form class="row g-3 align-items-end mb-4" method="get" th:action="@{/auditoria}">
+        <input type="hidden" name="vista" th:value="${f.vista.name()}">
+        <th:block th:if="${f.vista.name() == 'PRIVILEGIOS' and auditoria.privilegios != null}"
+                  th:with="p=${auditoria.privilegios}">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="beneficiario">Usuario o rol a auditar</label>
+                <select class="form-select" id="beneficiario" name="beneficiario" th:if="${p.beneficiarios != null}">
+                    <optgroup label="Usuarios">
+                        <option th:each="b : ${p.beneficiarios}" th:if="${b.esUsuario()}" th:value="${b.nombre}"
+                                th:text="${b.nombre}"
+                                th:selected="${p.seleccionado != null and b.nombre == p.seleccionado.nombre}"></option>
+                    </optgroup>
+                    <optgroup label="Roles">
+                        <option th:each="b : ${p.beneficiarios}" th:unless="${b.esUsuario()}" th:value="${b.nombre}"
+                                th:text="${b.nombre}"
+                                th:selected="${p.seleccionado != null and b.nombre == p.seleccionado.nombre}"></option>
+                    </optgroup>
+                </select>
+                <input class="form-control" id="beneficiario" name="beneficiario" type="text" maxlength="128"
+                       th:if="${p.beneficiarios == null}" th:value="${p.nombreSolicitado}">
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="alcance">Origen del privilegio</label>
+                <select class="form-select" id="alcance" name="alcance">
+                    <option th:each="a : ${alcances}" th:value="${a.name()}" th:text="${a.etiqueta}"
+                            th:selected="${a == f.origenPrivilegio}"></option>
+                </select>
+            </div>
+        </th:block>
+        <div class="col-12 col-md-4">
+            <label class="form-label" for="origen"
+                   th:text="${f.vista.name() == 'PRIVILEGIOS'} ? 'Usuarios y roles en la lista' : 'Origen'">Origen</label>
+            <select class="form-select" id="origen" name="origen">
+                <option th:each="o : ${origenes}" th:value="${o.name()}" th:text="${o.etiqueta}"
+                        th:selected="${o == f.origen}"></option>
+            </select>
+        </div>
+        <div class="col-12 col-md-4">
+            <label class="form-label" for="buscar" th:text="${f.vista.etiquetaBusqueda}">Buscar</label>
+            <input class="form-control" id="buscar" name="buscar" type="search" maxlength="128"
+                   th:value="${f.busqueda}">
+        </div>
+        <div class="col-12 col-md-4">
+            <label class="form-label" for="limite">Filas por tabla (10 a 500)</label>
+            <input class="form-control" id="limite" name="limite" type="number" min="10" max="500"
+                   th:value="${f.limite}">
+        </div>
+        <div class="col-12 col-md-4">
+            <button class="btn btn-primary w-100 py-2" type="submit">Aplicar</button>
+        </div>
+    </form>
+
+    <!-- Usuarios -->
+    <th:block th:if="${f.vista.name() == 'USUARIOS'}" th:with="u=${auditoria.usuarios}">
+        <section class="card p-4 mb-4" aria-labelledby="usuarios-title">
+            <h2 id="usuarios-title" class="h5 mb-1">Usuarios registrados</h2>
+            <p class="text-body-secondary small">Cuentas de base de datos definidas en el contenedor consultado.
+                Una cuenta común existe en todos los contenedores del CDB; una local, solo en este contenedor.
+                Las cuentas marcadas como «Oracle» las crea y mantiene el propio gestor.</p>
+            <p class="text-body-secondary small" th:if="${u?.usuarios != null and u.usuarios.truncado()}"
+               th:text="'Se muestran ' + ${u.usuarios.filas.size()} + ' de ' + ${u.usuarios.total}
+                   + ' usuarios. Use la búsqueda o aumente las filas por tabla para ver el resto.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${u?.usuarios == null}">No disponible</p>
+            <p class="text-body-secondary mb-0" th:if="${u?.usuarios != null and u.usuarios.filas.isEmpty()}">
+                No hay usuarios que coincidan con los filtros seleccionados.</p>
+            <div class="table-responsive" th:if="${u?.usuarios != null and !u.usuarios.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_USERS. Los roles y privilegios contados son solo los
+                        asignados directamente a la cuenta.</caption>
+                    <thead><tr>
+                        <th scope="col">Usuario</th>
+                        <th scope="col">Estado de la cuenta</th>
+                        <th scope="col">Autenticación</th>
+                        <th scope="col">Alcance</th>
+                        <th scope="col">Perfil</th>
+                        <th scope="col">Tablespace por defecto</th>
+                        <th scope="col">Creación</th>
+                        <th scope="col">Expiración de contraseña</th>
+                        <th scope="col">Último ingreso</th>
+                        <th scope="col" class="text-end">Roles directos</th>
+                        <th scope="col" class="text-end">Privilegios de sistema directos</th>
+                        <th scope="col">Detalle</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${u.usuarios.filas}">
+                        <th scope="row" class="text-nowrap">
+                            <span th:text="${x.nombre}"></span>
+                            <span class="badge text-bg-secondary" th:if="${x.mantenidoPorOracle}">Oracle</span>
+                        </th>
+                        <td>
+                            <span class="badge" th:classappend="${formatos.claseEstadoCuenta(x.estadoCuenta)}"
+                                  th:text="${formatos.estadoCuenta(x.estadoCuenta)}"></span>
+                            <span class="d-block small text-body-secondary" th:if="${x.bloqueo != null}"
+                                  th:text="'Desde ' + ${#temporals.format(x.bloqueo, 'dd/MM/yyyy HH:mm')}"></span>
+                        </td>
+                        <td th:text="${formatos.autenticacionUsuario(x.autenticacion)}"></td>
+                        <td th:text="${formatos.alcanceCuenta(x.comun)}"></td>
+                        <td th:text="${formatos.texto(x.perfil)}"></td>
+                        <td th:text="${formatos.texto(x.tablespacePorDefecto)}"></td>
+                        <td class="text-nowrap" th:text="${x.creacion != null
+                            ? #temporals.format(x.creacion, 'dd/MM/yyyy HH:mm') : 'No disponible'}"></td>
+                        <td class="text-nowrap" th:text="${x.expiracion != null
+                            ? #temporals.format(x.expiracion, 'dd/MM/yyyy HH:mm') : 'Sin fecha'}"></td>
+                        <td class="text-nowrap" th:text="${x.ultimoIngreso != null
+                            ? #temporals.format(x.ultimoIngreso, 'dd/MM/yyyy HH:mm') : 'Sin registro'}"></td>
+                        <td class="text-end" th:text="${x.rolesDirectos}"></td>
+                        <td class="text-end" th:text="${x.privilegiosSistemaDirectos}"></td>
+                        <td class="text-nowrap"><a th:href="@{/auditoria(vista='PRIVILEGIOS', beneficiario=${x.nombre})}">
+                            Ver privilegios</a></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card p-4 mb-4" aria-labelledby="administrativas-title">
+            <h2 id="administrativas-title" class="h5 mb-1">Cuentas con privilegios administrativos de instancia</h2>
+            <p class="text-body-secondary small">Oracle no separa los inicios de sesión del servidor de los usuarios
+                de base de datos, como sí lo hace SQL Server. El equivalente a nivel de instancia son las cuentas
+                registradas en el archivo de contraseñas con privilegios administrativos (SYSDBA, SYSOPER, …),
+                que pueden conectarse incluso con la base cerrada. Las cuentas con autenticación externa se validan
+                contra el sistema operativo del servidor.</p>
+            <p class="text-body-secondary mb-0" th:if="${u?.cuentasAdministrativas == null}">No disponible</p>
+            <p class="text-body-secondary mb-0"
+               th:if="${u?.cuentasAdministrativas != null and u.cuentasAdministrativas.isEmpty()}">
+                No hay cuentas registradas en el archivo de contraseñas de la instancia.</p>
+            <div class="table-responsive"
+                 th:if="${u?.cuentasAdministrativas != null and !u.cuentasAdministrativas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de V$PWFILE_USERS.</caption>
+                    <thead><tr>
+                        <th scope="col">Cuenta</th>
+                        <th scope="col">Privilegios administrativos</th>
+                        <th scope="col">Estado de la cuenta</th>
+                        <th scope="col">Autenticación</th>
+                        <th scope="col">Alcance</th>
+                        <th scope="col">Último ingreso</th>
+                    </tr></thead>
+                    <tbody><tr th:each="c : ${u.cuentasAdministrativas}">
+                        <th scope="row" class="text-nowrap" th:text="${c.nombre}"></th>
+                        <td th:text="${c.privilegios.isEmpty() ? 'Ninguno' : #strings.listJoin(c.privilegios, ', ')}"></td>
+                        <td><span class="badge" th:classappend="${formatos.claseEstadoCuenta(c.estadoCuenta)}"
+                                  th:text="${formatos.estadoCuenta(c.estadoCuenta)}"></span></td>
+                        <td th:text="${formatos.autenticacionUsuario(c.autenticacion)}"></td>
+                        <td th:text="${formatos.alcanceCuenta(c.comun)}"></td>
+                        <td class="text-nowrap" th:text="${c.ultimoIngreso != null
+                            ? #temporals.format(c.ultimoIngreso, 'dd/MM/yyyy HH:mm') : 'Sin registro'}"></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+
+    <!-- Roles -->
+    <th:block th:if="${f.vista.name() == 'ROLES'}" th:with="r=${auditoria.roles}">
+        <section class="card p-4 mb-4" aria-labelledby="roles-title">
+            <h2 id="roles-title" class="h5 mb-1">Roles disponibles</h2>
+            <p class="text-body-secondary small">Un rol agrupa privilegios y otros roles para asignarlos en
+                conjunto. Las columnas de la derecha cuentan cuántos usuarios y roles lo reciben directamente.</p>
+            <p class="text-body-secondary small" th:if="${r?.roles != null and r.roles.truncado()}"
+               th:text="'Se muestran ' + ${r.roles.filas.size()} + ' de ' + ${r.roles.total} + ' roles.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${r?.roles == null}">No disponible</p>
+            <p class="text-body-secondary mb-0" th:if="${r?.roles != null and r.roles.filas.isEmpty()}">
+                No hay roles que coincidan con los filtros seleccionados.</p>
+            <div class="table-responsive" th:if="${r?.roles != null and !r.roles.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_ROLES y DBA_ROLE_PRIVS.</caption>
+                    <thead><tr>
+                        <th scope="col">Rol</th>
+                        <th scope="col">Activación</th>
+                        <th scope="col">Alcance</th>
+                        <th scope="col" class="text-end">Usuarios con el rol</th>
+                        <th scope="col" class="text-end">Roles que lo reciben</th>
+                        <th scope="col">Detalle</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${r.roles.filas}">
+                        <th scope="row" class="text-nowrap">
+                            <span th:text="${x.nombre}"></span>
+                            <span class="badge text-bg-secondary" th:if="${x.mantenidoPorOracle}">Oracle</span>
+                        </th>
+                        <td th:text="${formatos.autenticacionRol(x.autenticacion)}"></td>
+                        <td th:text="${formatos.alcanceCuenta(x.comun)}"></td>
+                        <td class="text-end" th:text="${x.usuariosAsignados}"></td>
+                        <td class="text-end" th:text="${x.rolesAsignados}"></td>
+                        <td class="text-nowrap"><a th:href="@{/auditoria(vista='PRIVILEGIOS', beneficiario=${x.nombre})}">
+                            Ver privilegios</a></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card p-4 mb-4" aria-labelledby="asignaciones-title">
+            <h2 id="asignaciones-title" class="h5 mb-1">Asignación de roles</h2>
+            <p class="text-body-secondary small">Cada fila indica qué usuario o rol recibió directamente un rol.
+                Las asignaciones a usuarios se listan primero.</p>
+            <p class="text-body-secondary small" th:if="${r?.asignaciones != null and r.asignaciones.truncado()}"
+               th:text="'Se muestran ' + ${r.asignaciones.filas.size()} + ' de ' + ${r.asignaciones.total}
+                   + ' asignaciones.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${r?.asignaciones == null}">No disponible</p>
+            <p class="text-body-secondary mb-0" th:if="${r?.asignaciones != null and r.asignaciones.filas.isEmpty()}">
+                No hay asignaciones de roles que coincidan con los filtros seleccionados.</p>
+            <div class="table-responsive" th:if="${r?.asignaciones != null and !r.asignaciones.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_ROLE_PRIVS. Un rol predeterminado se activa
+                        automáticamente al iniciar sesión.</caption>
+                    <thead><tr>
+                        <th scope="col">Beneficiario</th>
+                        <th scope="col">Tipo</th>
+                        <th scope="col">Rol asignado</th>
+                        <th scope="col">Puede otorgarlo (ADMIN OPTION)</th>
+                        <th scope="col">Predeterminado</th>
+                        <th scope="col">Alcance</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${r.asignaciones.filas}">
+                        <th scope="row" class="text-nowrap">
+                            <a th:href="@{/auditoria(vista='PRIVILEGIOS', beneficiario=${x.beneficiario})}"
+                               th:text="${x.beneficiario}"></a>
+                        </th>
+                        <td th:text="${formatos.tipoBeneficiario(x.tipoBeneficiario)}"></td>
+                        <td class="text-nowrap" th:text="${x.rol}"></td>
+                        <td th:text="${formatos.siNo(x.conAdministracion)}"></td>
+                        <td th:text="${formatos.siNo(x.predeterminado)}"></td>
+                        <td th:text="${formatos.alcanceCuenta(x.comun)}"></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+
+    <!-- Privilegios -->
+    <th:block th:if="${f.vista.name() == 'PRIVILEGIOS'}" th:with="p=${auditoria.privilegios}">
+        <div class="alert alert-warning" role="status"
+             th:if="${p != null and p.seleccionado == null and p.nombreSolicitado != null and p.beneficiarios != null}"
+             th:text="'No existe un usuario o rol llamado «' + ${p.nombreSolicitado}
+                 + '» en el contenedor consultado. Seleccione uno de la lista.'"></div>
+
+        <th:block th:if="${p?.seleccionado != null}">
+            <section class="card p-4 mb-4" aria-labelledby="observaciones-title">
+                <h2 id="observaciones-title" class="h5 mb-1"
+                    th:text="'Observaciones de seguridad: ' + ${p.seleccionado.nombre}"></h2>
+                <p class="text-body-secondary small" th:if="${p.seleccionado.tipo != null}"
+                   th:text="${p.seleccionado.esUsuario()} ? 'Tipo: usuario' : 'Tipo: rol'"></p>
+                <p class="text-body-secondary mb-0" th:if="${p.observaciones.isEmpty()}">
+                    No hay información suficiente para interpretar los privilegios.</p>
+                <ul class="mb-0" th:if="${!p.observaciones.isEmpty()}">
+                    <li th:each="o : ${p.observaciones}" th:text="${o}"></li>
+                </ul>
+            </section>
+
+            <section class="card p-4 mb-4" aria-labelledby="roles-efectivos-title">
+                <h2 id="roles-efectivos-title" class="h5 mb-1">Roles directos y heredados</h2>
+                <p class="text-body-secondary small">Incluye los roles recibidos directamente y los que llegan a
+                    través de otros roles (roles anidados), indicando por cuál se heredan.</p>
+                <p class="text-body-secondary mb-0" th:if="${p.rolesEfectivos == null}">No disponible</p>
+                <p class="text-body-secondary mb-0" th:if="${p.rolesEfectivos != null and p.rolesEfectivos.isEmpty()}">
+                    No tiene roles asignados.</p>
+                <div class="table-responsive" th:if="${p.rolesEfectivos != null and !p.rolesEfectivos.isEmpty()}">
+                    <table class="table align-middle">
+                        <caption>Jerarquía obtenida de DBA_ROLE_PRIVS. Si un rol se recibe por varios caminos, se
+                            muestra el más corto.</caption>
+                        <thead><tr>
+                            <th scope="col">Rol</th>
+                            <th scope="col">Origen</th>
+                            <th scope="col" class="text-end">Nivel</th>
+                            <th scope="col">Puede otorgarlo (ADMIN OPTION)</th>
+                            <th scope="col">Predeterminado</th>
+                        </tr></thead>
+                        <tbody><tr th:each="x : ${p.rolesEfectivos}">
+                            <th scope="row" class="text-nowrap" th:text="${x.rol}"></th>
+                            <td>
+                                <span class="badge text-bg-primary" th:if="${x.directo()}">Directo</span>
+                                <span th:unless="${x.directo()}" th:text="'Mediante ' + ${x.ruta}"></span>
+                            </td>
+                            <td class="text-end" th:text="${x.nivel}"></td>
+                            <td th:text="${x.directo()} ? ${formatos.siNo(x.conAdministracion)} : 'No aplica'"></td>
+                            <td th:text="${x.directo()} ? ${formatos.siNo(x.predeterminado)} : 'No aplica'"></td>
+                        </tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card p-4 mb-4" aria-labelledby="sistema-title">
+                <h2 id="sistema-title" class="h5 mb-1">Privilegios de sistema</h2>
+                <p class="text-body-secondary small">Permiten ejecutar acciones en toda la base de datos (por
+                    ejemplo CREATE SESSION o SELECT ANY TABLE). Los asignados directamente aparecen primero.</p>
+                <p class="text-body-secondary small" th:if="${p.sistema != null and p.sistema.truncado()}"
+                   th:text="'Se muestran ' + ${p.sistema.filas.size()} + ' de ' + ${p.sistema.total}
+                       + ' privilegios. Use la búsqueda o aumente las filas por tabla para ver el resto.'"></p>
+                <p class="text-body-secondary mb-0" th:if="${p.sistema == null}">No disponible</p>
+                <p class="text-body-secondary mb-0" th:if="${p.sistema != null and p.sistema.filas.isEmpty()}">
+                    No tiene privilegios de sistema con el origen y la búsqueda seleccionados.</p>
+                <div class="table-responsive" th:if="${p.sistema != null and !p.sistema.filas.isEmpty()}">
+                    <table class="table align-middle">
+                        <caption>Información obtenida de DBA_SYS_PRIVS. Un mismo privilegio aparece una vez por
+                            cada rol que lo otorga.</caption>
+                        <thead><tr>
+                            <th scope="col">Privilegio</th>
+                            <th scope="col">Origen</th>
+                            <th scope="col">Ámbito</th>
+                            <th scope="col">Puede otorgarlo (ADMIN OPTION)</th>
+                        </tr></thead>
+                        <tbody><tr th:each="x : ${p.sistema.filas}">
+                            <th scope="row" class="fw-normal text-nowrap" th:text="${x.privilegio}"></th>
+                            <td>
+                                <span class="badge text-bg-primary" th:if="${x.directo}">Directo</span>
+                                <span th:unless="${x.directo}" th:text="'Mediante el rol ' + ${x.otorgadoA}"></span>
+                            </td>
+                            <td>Toda la base de datos</td>
+                            <td th:text="${formatos.siNo(x.conAdministracion)}"></td>
+                        </tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card p-4 mb-4" aria-labelledby="objeto-title">
+                <h2 id="objeto-title" class="h5 mb-1">Privilegios sobre objetos</h2>
+                <p class="text-body-secondary small">Permiten operar sobre un objeto concreto de un esquema (tabla,
+                    vista, paquete, directorio…). Los asignados directamente aparecen primero.</p>
+                <p class="text-body-secondary small" th:if="${p.objetos != null and p.objetos.truncado()}"
+                   th:text="'Se muestran ' + ${p.objetos.filas.size()} + ' de ' + ${p.objetos.total}
+                       + ' privilegios. Use la búsqueda o aumente las filas por tabla para ver el resto.'"></p>
+                <p class="text-body-secondary mb-0" th:if="${p.objetos == null}">No disponible</p>
+                <p class="text-body-secondary mb-0" th:if="${p.objetos != null and p.objetos.filas.isEmpty()}">
+                    No tiene privilegios sobre objetos con el origen y la búsqueda seleccionados.</p>
+                <div class="table-responsive" th:if="${p.objetos != null and !p.objetos.filas.isEmpty()}">
+                    <table class="table align-middle">
+                        <caption>Información obtenida de DBA_TAB_PRIVS.</caption>
+                        <thead><tr>
+                            <th scope="col">Privilegio</th>
+                            <th scope="col">Objeto</th>
+                            <th scope="col">Tipo de objeto</th>
+                            <th scope="col">Origen</th>
+                            <th scope="col">Otorgado por</th>
+                            <th scope="col">Puede otorgarlo (GRANT OPTION)</th>
+                        </tr></thead>
+                        <tbody><tr th:each="x : ${p.objetos.filas}">
+                            <th scope="row" class="fw-normal text-nowrap" th:text="${x.privilegio}"></th>
+                            <td class="text-break" th:text="${x.propietario} + '.' + ${x.objeto}"></td>
+                            <td th:text="${formatos.texto(x.tipoObjeto)}"></td>
+                            <td>
+                                <span class="badge text-bg-primary" th:if="${x.directo}">Directo</span>
+                                <span th:unless="${x.directo}" th:text="'Mediante el rol ' + ${x.otorgadoA}"></span>
+                            </td>
+                            <td th:text="${formatos.texto(x.otorgante)}"></td>
+                            <td th:text="${formatos.siNo(x.otorgable)}"></td>
+                        </tr></tbody>
+                    </table>
+                </div>
+            </section>
+        </th:block>
+
+        <section class="card p-4 mb-4" aria-labelledby="limitaciones-title">
+            <h2 id="limitaciones-title" class="h5 mb-1">Alcance de la consulta de privilegios</h2>
+            <ul class="small text-body-secondary mb-0">
+                <li>Se incluyen los privilegios asignados directamente y los heredados mediante roles, incluso
+                    anidados.</li>
+                <li>No se incluyen los privilegios otorgados a PUBLIC (aplican a todas las cuentas), los privilegios
+                    por columna (DBA_COL_PRIVS) ni los privilegios de esquema de Oracle 23ai (DBA_SCHEMA_PRIVS).</li>
+                <li>Un rol no predeterminado o protegido con contraseña solo otorga sus privilegios cuando la sesión
+                    lo activa con SET ROLE, por lo que esta lista representa los privilegios disponibles, no
+                    necesariamente los activos en una sesión concreta.</li>
+                <li>El propietario de un esquema tiene todos los privilegios sobre sus propios objetos sin que
+                    aparezcan como privilegios otorgados.</li>
+            </ul>
+        </section>
+    </th:block>
+
+    <!-- Objetos con problemas -->
+    <th:block th:if="${f.vista.name() == 'OBJETOS'}" th:with="o=${auditoria.objetos}">
+        <p class="text-body-secondary small">En Oracle, una vista, procedimiento, paquete, disparador o tipo queda
+            en estado INVALID cuando falla su compilación o cambia un objeto del que depende; Oracle intenta
+            recompilarlo automáticamente en su siguiente uso. Este módulo solo detecta los problemas: la
+            recompilación corresponde al mantenimiento preventivo.</p>
+
+        <section class="card p-4 mb-4" aria-labelledby="invalidos-title">
+            <h2 id="invalidos-title" class="h5 mb-1">Objetos inválidos</h2>
+            <p class="text-body-secondary small" th:if="${o?.invalidos != null and o.invalidos.truncado()}"
+               th:text="'Se muestran ' + ${o.invalidos.filas.size()} + ' de ' + ${o.invalidos.total} + ' objetos.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${o?.invalidos == null}">No disponible</p>
+            <p class="mb-0" th:if="${o?.invalidos != null and o.invalidos.filas.isEmpty()}">
+                <span class="badge text-bg-success">Sin problemas</span>
+                <span class="text-body-secondary">No se encontraron objetos inválidos con los filtros
+                    seleccionados.</span></p>
+            <div class="table-responsive" th:if="${o?.invalidos != null and !o.invalidos.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_OBJECTS (STATUS = 'INVALID') y DBA_ERRORS.</caption>
+                    <thead><tr>
+                        <th scope="col">Propietario</th>
+                        <th scope="col">Objeto</th>
+                        <th scope="col">Tipo</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col" class="text-end">Errores de compilación</th>
+                        <th scope="col">Última modificación (DDL)</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${o.invalidos.filas}">
+                        <td th:text="${x.propietario}"></td>
+                        <th scope="row" class="text-break" th:text="${x.nombre}"></th>
+                        <td class="text-nowrap" th:text="${x.tipo}"></td>
+                        <td><span class="badge text-bg-danger" th:text="${x.estado}"></span></td>
+                        <td class="text-end" th:text="${x.errores}"></td>
+                        <td class="text-nowrap" th:text="${x.ultimaModificacion != null
+                            ? #temporals.format(x.ultimaModificacion, 'dd/MM/yyyy HH:mm:ss') : 'No disponible'}"></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card p-4 mb-4" aria-labelledby="errores-title">
+            <h2 id="errores-title" class="h5 mb-1">Errores y advertencias de compilación</h2>
+            <p class="text-body-secondary small" th:if="${o?.errores != null and o.errores.truncado()}"
+               th:text="'Se muestran ' + ${o.errores.filas.size()} + ' de ' + ${o.errores.total} + ' mensajes.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${o?.errores == null}">No disponible</p>
+            <p class="mb-0" th:if="${o?.errores != null and o.errores.filas.isEmpty()}">
+                <span class="badge text-bg-success">Sin problemas</span>
+                <span class="text-body-secondary">No hay errores ni advertencias de compilación registrados.</span></p>
+            <div class="table-responsive" th:if="${o?.errores != null and !o.errores.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_ERRORS: mensajes de la última compilación de cada objeto.</caption>
+                    <thead><tr>
+                        <th scope="col">Objeto</th>
+                        <th scope="col">Tipo</th>
+                        <th scope="col">Línea:posición</th>
+                        <th scope="col">Clase</th>
+                        <th scope="col">Mensaje</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${o.errores.filas}">
+                        <th scope="row" class="text-break" th:text="${x.propietario} + '.' + ${x.nombre}"></th>
+                        <td class="text-nowrap" th:text="${x.tipo}"></td>
+                        <td class="text-nowrap" th:text="${x.linea} + ':' + ${x.posicion}"></td>
+                        <td><span class="badge" th:classappend="${x.atributo == 'ERROR'} ? 'text-bg-danger' : 'text-bg-warning'"
+                                  th:text="${x.atributo == 'ERROR'} ? 'Error' : 'Advertencia'"></span></td>
+                        <td class="text-break" th:text="${x.mensaje}"></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card p-4 mb-4" aria-labelledby="dependencias-title">
+            <h2 id="dependencias-title" class="h5 mb-1">Dependencias problemáticas</h2>
+            <p class="text-body-secondary small">Objetos que dependen de otro objeto inválido: quedan inválidos o
+                fallan al ejecutarse mientras el objeto referido no se corrija, por lo que ayudan a ubicar la causa
+                raíz del problema.</p>
+            <p class="text-body-secondary small" th:if="${o?.dependencias != null and o.dependencias.truncado()}"
+               th:text="'Se muestran ' + ${o.dependencias.filas.size()} + ' de ' + ${o.dependencias.total}
+                   + ' dependencias.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${o?.dependencias == null}">No disponible</p>
+            <p class="mb-0" th:if="${o?.dependencias != null and o.dependencias.filas.isEmpty()}">
+                <span class="badge text-bg-success">Sin problemas</span>
+                <span class="text-body-secondary">Ningún objeto depende de objetos inválidos.</span></p>
+            <div class="table-responsive" th:if="${o?.dependencias != null and !o.dependencias.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_DEPENDENCIES y DBA_OBJECTS.</caption>
+                    <thead><tr>
+                        <th scope="col">Objeto dependiente</th>
+                        <th scope="col">Tipo</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col">Depende del objeto inválido</th>
+                        <th scope="col">Tipo del objeto inválido</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${o.dependencias.filas}">
+                        <th scope="row" class="text-break" th:text="${x.propietario} + '.' + ${x.nombre}"></th>
+                        <td class="text-nowrap" th:text="${x.tipo}"></td>
+                        <td><span class="badge" th:classappend="${x.estado == 'VALID'} ? 'text-bg-warning' : 'text-bg-danger'"
+                                  th:text="${formatos.texto(x.estado)}"></span></td>
+                        <td class="text-break" th:text="${x.propietarioReferido} + '.' + ${x.nombreReferido}"></td>
+                        <td class="text-nowrap" th:text="${x.tipoReferido}"></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card p-4 mb-4" aria-labelledby="indices-title">
+            <h2 id="indices-title" class="h5 mb-1">Índices inutilizables</h2>
+            <p class="text-body-secondary small">Un índice en estado UNUSABLE no aparece como inválido en DBA_OBJECTS,
+                pero Oracle deja de usarlo y de mantenerlo; si es único, las operaciones DML sobre la tabla fallan
+                hasta reconstruirlo.</p>
+            <p class="text-body-secondary small" th:if="${o?.indices != null and o.indices.truncado()}"
+               th:text="'Se muestran ' + ${o.indices.filas.size()} + ' de ' + ${o.indices.total} + ' índices.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${o?.indices == null}">No disponible</p>
+            <p class="mb-0" th:if="${o?.indices != null and o.indices.filas.isEmpty()}">
+                <span class="badge text-bg-success">Sin problemas</span>
+                <span class="text-body-secondary">No hay índices ni particiones de índice inutilizables.</span></p>
+            <div class="table-responsive" th:if="${o?.indices != null and !o.indices.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_INDEXES, DBA_IND_PARTITIONS y DBA_IND_SUBPARTITIONS.</caption>
+                    <thead><tr>
+                        <th scope="col">Propietario</th>
+                        <th scope="col">Índice</th>
+                        <th scope="col">Partición</th>
+                        <th scope="col">Tabla</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${o.indices.filas}">
+                        <td th:text="${x.propietario}"></td>
+                        <th scope="row" class="text-break" th:text="${x.indice}"></th>
+                        <td th:text="${x.particion ?: 'Índice completo'}"></td>
+                        <td class="text-break" th:text="${x.propietarioTabla} + '.' + ${x.tabla}"></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</main>
+</body>
+</html>
