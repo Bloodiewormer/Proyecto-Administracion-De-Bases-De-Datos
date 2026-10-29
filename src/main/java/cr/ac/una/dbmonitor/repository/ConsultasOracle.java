@@ -1,7 +1,10 @@
 package cr.ac.una.dbmonitor.repository;
 
+import cr.ac.una.dbmonitor.dto.Listado;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 import java.net.SocketTimeoutException;
 import java.sql.SQLException;
@@ -28,6 +31,23 @@ public final class ConsultasOracle {
             avisos.add(vista + ": " + mensaje(ex));
             return null;
         }
+    }
+
+    /**
+     * Ejecuta una consulta limitada con FETCH FIRST cuyo SELECT incluye la columna TOTAL (COUNT(*) OVER ()),
+     * calculada antes del límite. Devuelve null y registra un aviso si la consulta falla.
+     */
+    public static <T> Listado<T> listado(String vista, JdbcTemplate jdbc, String sql, Object[] parametros,
+                                         RowMapper<T> mapper, List<String> avisos) {
+        var total = new int[1];
+        var filas = leerTolerandoVacio(vista, () -> jdbc.query(sql, (rs, row) -> {
+            total[0] = rs.getInt("TOTAL");
+            return mapper.mapRow(rs, row);
+        }, parametros), avisos);
+        if (filas == null) {
+            return null;
+        }
+        return new Listado<>(filas, Math.max(total[0], filas.size()));
     }
 
     public static <T> T unica(List<T> filas, String vista, List<String> avisos) {

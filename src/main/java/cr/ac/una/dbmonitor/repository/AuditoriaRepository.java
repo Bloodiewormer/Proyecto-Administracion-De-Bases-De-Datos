@@ -2,6 +2,7 @@ package cr.ac.una.dbmonitor.repository;
 
 import cr.ac.una.dbmonitor.dto.AuditoriaDto;
 import cr.ac.una.dbmonitor.dto.FiltrosAuditoria;
+import cr.ac.una.dbmonitor.dto.Listado;
 import cr.ac.una.dbmonitor.service.ConexionOracleService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -341,17 +342,9 @@ public class AuditoriaRepository {
         return new AuditoriaDto.ObjetosAuditoria(invalidos, errores, dependencias, indices);
     }
 
-    private <T> AuditoriaDto.Listado<T> listado(JdbcTemplate jdbc, String vista, Sentencia sentencia,
-                                                RowMapper<T> mapper, List<String> avisos) {
-        var total = new int[1];
-        var filas = ConsultasOracle.leerTolerandoVacio(vista, () -> jdbc.query(sentencia.sql(), (rs, row) -> {
-            total[0] = rs.getInt("TOTAL");
-            return mapper.mapRow(rs, row);
-        }, sentencia.parametros()), avisos);
-        if (filas == null) {
-            return null;
-        }
-        return new AuditoriaDto.Listado<>(filas, Math.max(total[0], filas.size()));
+    private <T> Listado<T> listado(JdbcTemplate jdbc, String vista, Sentencia sentencia,
+                                   RowMapper<T> mapper, List<String> avisos) {
+        return ConsultasOracle.listado(vista, jdbc, sentencia.sql(), sentencia.parametros(), mapper, avisos);
     }
 
     private AuditoriaDto.Resumen resumen(ResultSet rs) throws SQLException {

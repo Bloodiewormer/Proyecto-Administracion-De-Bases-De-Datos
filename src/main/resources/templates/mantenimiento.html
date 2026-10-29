@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mantenimiento preventivo | Oracle DB Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+<main class="container py-4 py-md-5" th:with="m=${mantenimiento}, ctx=${mantenimiento.contexto}">
+    <div th:replace="~{fragments/navegacion :: cabecera('mantenimiento')}"></div>
+    <h1 class="mb-4">Mantenimiento preventivo</h1>
+
+    <div class="alert mb-4" role="status" th:if="${resultado != null}"
+         th:classappend="${resultado.nivel.name() == 'EXITO'} ? 'alert-success'
+             : (${resultado.nivel.name() == 'ADVERTENCIA'} ? 'alert-warning' : 'alert-danger')">
+        <h2 class="h6 mb-1" th:text="(${resultado.nivel.name() == 'EXITO'} ? 'Operación completada'
+                : (${resultado.nivel.name() == 'ADVERTENCIA'} ? 'Operación completada con advertencias'
+                : 'La operación presentó errores')) + ': ' + ${resultado.operacion}"></h2>
+        <p class="mb-1" th:text="'Objetivo: ' + ${resultado.objetivo}"></p>
+        <p class="mb-1" th:text="${resultado.detalle}"></p>
+        <p class="small mb-0" th:text="'Duración: ' + ${resultado.milisegundos} + ' ms · Ejecutada el '
+            + ${#temporals.format(resultado.momento, 'dd/MM/yyyy HH:mm:ss')} + ' (hora de la aplicación)'"></p>
+    </div>
+
+    <div class="alert alert-warning" role="status" th:if="${!avisos.isEmpty()}">
+        <p class="mb-2" th:each="aviso : ${avisos}" th:text="${aviso}"></p>
+        <p class="mb-2" th:if="${faltanPermisos}">La cuenta conectada no puede leer parte del diccionario de datos.
+            Para detectar tareas pendientes necesita <code>SELECT_CATALOG_ROLE</code>; para ejecutarlas sobre otros
+            esquemas, <code>ANALYZE ANY</code> y los privilegios <code>ALTER ANY</code> del tipo de objeto. La
+            información afectada se muestra como «No disponible», no como ausencia de problemas.</p>
+        <a class="alert-link" th:href="@{/conexion}">Configurar conexión</a>
+    </div>
+
+    <p class="text-body-secondary small" th:if="${ctx != null}"
+       th:text="'Contenedor consultado: ' + ${ctx.contenedor}
+           + (${ctx.esPdb} ? ' (base de datos conectable)' : ' (contenedor raíz o base única)')
+           + ' · Cuenta de la sesión: ' + ${ctx.usuarioSesion}"></p>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Tablas sin estadísticas</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.entero(m.resumen?.tablasSinEstadisticas)}"></p>
+        </section></div>
+        <div class="col-12 col-md-6"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Tablas con estadísticas desactualizadas</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.entero(m.resumen?.tablasDesactualizadas)}"></p>
+        </section></div>
+        <div class="col-12 col-md-6"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Objetos inválidos</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.entero(m.resumen?.objetosInvalidos)}"></p>
+        </section></div>
+        <div class="col-12 col-md-6"><section class="card h-100 p-4">
+            <h2 class="h6 text-body-secondary">Errores de compilación</h2>
+            <p class="fs-5 mb-0" th:text="${formatos.entero(m.resumen?.erroresCompilacion)}"></p>
+        </section></div>
+    </div>
+    <p class="text-body-secondary small">Los indicadores y las acciones abarcan solo los esquemas creados por la
+        organización. Los objetos de Oracle (SYS, SYSTEM y demás cuentas internas) se mantienen con sus propios
+        procedimientos, como <code>utlrp.sql</code> o <code>DBMS_STATS.GATHER_DICTIONARY_STATS</code>, ejecutados por
+        un DBA.</p>
+
+    <nav class="mb-4" aria-label="Secciones de mantenimiento">
+        <ul class="nav section-tabs">
+            <li class="nav-item" th:each="v : ${vistas}">
+                <a class="nav-link" th:href="@{/mantenimiento(vista=${v.name()})}"
+                   th:classappend="${v == m.vista} ? 'active' : ''"
+                   th:attr="aria-current=${v == m.vista} ? 'page' : null" th:text="${v.etiqueta}"></a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- Estadísticas -->
+    <th:block th:if="${m.vista.name() == 'ESTADISTICAS'}">
+        <p class="text-body-secondary small">El optimizador de Oracle usa las estadísticas (cantidad de filas,
+            distribución de valores, tamaño de índices) para elegir el plan de ejecución de cada consulta. Si faltan o
+            están desactualizadas tras muchos cambios en los datos, puede elegir planes lentos. Recalcularlas ejecuta
+            <code>DBMS_STATS</code> sobre la tabla y sus índices.</p>
+
+        <section class="card p-4 mb-4" aria-labelledby="esquema-estadisticas-title">
+            <h2 id="esquema-estadisticas-title" class="h5 mb-1">Recalcular estadísticas de un esquema</h2>
+            <p class="text-body-secondary small" th:text="'Ejecuta DBMS_STATS.GATHER_SCHEMA_STATS sobre todas las '
+                + 'tablas e índices del esquema. Puede tardar varios minutos en esquemas grandes (máximo '
+                + ${tiempoMaximo} + ' s).'"></p>
+            <p class="text-body-secondary mb-0" th:if="${m.esquemas == null}">No disponible</p>
+            <p class="text-body-secondary mb-0" th:if="${m.esquemas != null and m.esquemas.isEmpty()}">
+                No hay esquemas creados por la organización en este contenedor.</p>
+            <form class="row g-3 align-items-end" method="post" th:action="@{/mantenimiento/estadisticas/esquema}"
+                  th:if="${m.esquemas != null and !m.esquemas.isEmpty()}">
+                <input type="hidden" name="todas" th:value="${m.todasLasTablas}">
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="esquema-estadisticas">Esquema</label>
+                    <select class="form-select" id="esquema-estadisticas" name="esquema">
+                        <option th:each="e : ${m.esquemas}" th:value="${e}" th:text="${e}"></option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <button class="btn btn-primary w-100 py-2" type="submit">Recalcular estadísticas del esquema</button>
+                </div>
+            </form>
+        </section>
+
+        <form class="row g-3 align-items-end mb-4" method="get" th:action="@{/mantenimiento}">
+            <input type="hidden" name="vista" value="ESTADISTICAS">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="todas">Tablas a mostrar</label>
+                <select class="form-select" id="todas" name="todas">
+                    <option value="false" th:selected="${!m.todasLasTablas}">Solo las que requieren intervención</option>
+                    <option value="true" th:selected="${m.todasLasTablas}">Todas las tablas de la organización</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="limite-tablas">Filas por tabla (10 a 500)</label>
+                <input class="form-control" id="limite-tablas" name="limite" type="number" min="10" max="500"
+                       th:value="${m.limite}">
+            </div>
+            <div class="col-12 col-md-4">
+                <button class="btn btn-primary w-100 py-2" type="submit">Aplicar</button>
+            </div>
+        </form>
+
+        <section class="card p-4 mb-4" aria-labelledby="tablas-title">
+            <h2 id="tablas-title" class="h5 mb-1"
+                th:text="${m.todasLasTablas} ? 'Estadísticas de las tablas de la organización'
+                    : 'Tablas que requieren recalcular estadísticas'"></h2>
+            <p class="text-body-secondary small">Una tabla requiere intervención si nunca se analizó o si Oracle marcó
+                sus estadísticas como desactualizadas (STALE) por la cantidad de cambios desde el último análisis.</p>
+            <p class="text-body-secondary small" th:if="${m.tablas != null and m.tablas.truncado()}"
+               th:text="'Se muestran ' + ${m.tablas.filas.size()} + ' de ' + ${m.tablas.total} + ' tablas.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${m.tablas == null}">No disponible</p>
+            <p class="mb-0" th:if="${m.tablas != null and m.tablas.filas.isEmpty()}">
+                <span class="badge text-bg-success">Sin problemas</span>
+                <span class="text-body-secondary" th:text="${m.todasLasTablas}
+                    ? 'Los esquemas de la organización no tienen tablas.'
+                    : 'Todas las tablas de la organización tienen estadísticas al día.'"></span></p>
+            <div class="table-responsive" th:if="${m.tablas != null and !m.tablas.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_TAB_STATISTICS. Las tablas sin estadísticas aparecen primero.
+                        Las fechas siguen el reloj del servidor de base de datos.</caption>
+                    <thead><tr>
+                        <th scope="col">Esquema</th>
+                        <th scope="col">Tabla</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col" class="text-end">Filas registradas</th>
+                        <th scope="col">Último análisis</th>
+                        <th scope="col">Acción</th>
+                    </tr></thead>
+                    <tbody><tr th:each="t : ${m.tablas.filas}">
+                        <td th:text="${t.propietario}"></td>
+                        <th scope="row" class="text-break" th:text="${t.tabla}"></th>
+                        <td>
+                            <span class="badge" th:classappend="${t.sinEstadisticas()} ? 'text-bg-danger'
+                                      : (${t.desactualizadas} ? 'text-bg-warning' : 'text-bg-success')"
+                                  th:text="${t.sinEstadisticas()} ? 'Sin estadísticas'
+                                      : (${t.desactualizadas} ? 'Desactualizadas' : 'Al día')"></span>
+                            <span class="badge text-bg-secondary" th:if="${t.bloqueadas()}">Bloqueadas</span>
+                        </td>
+                        <td class="text-end" th:text="${t.sinEstadisticas()} ? 'Sin dato' : ${formatos.numero(t.filas)}"></td>
+                        <td class="text-nowrap" th:text="${t.ultimoAnalisis != null
+                            ? #temporals.format(t.ultimoAnalisis, 'dd/MM/yyyy HH:mm:ss') : 'Nunca'}"></td>
+                        <td>
+                            <form class="mb-0" method="post" th:action="@{/mantenimiento/estadisticas/tabla}">
+                                <input type="hidden" name="esquema" th:value="${t.propietario}">
+                                <input type="hidden" name="tabla" th:value="${t.tabla}">
+                                <input type="hidden" name="todas" th:value="${m.todasLasTablas}">
+                                <button class="btn btn-primary btn-sm" type="submit">Recalcular</button>
+                            </form>
+                        </td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+
+    <!-- Recompilación -->
+    <th:block th:if="${m.vista.name() == 'RECOMPILACION'}">
+        <p class="text-body-secondary small">Un objeto queda en estado INVALID cuando falla su compilación o cambia un
+            objeto del que depende. Recompilarlo ejecuta <code>ALTER … COMPILE</code>: si el problema era solo la
+            dependencia, el objeto vuelve a VALID; si su código tiene errores, Oracle los registra y el objeto sigue
+            inválido hasta corregir el código.</p>
+
+        <section class="card p-4 mb-4" aria-labelledby="esquema-recompilar-title">
+            <h2 id="esquema-recompilar-title" class="h5 mb-1">Recompilar los objetos inválidos de un esquema</h2>
+            <p class="text-body-secondary small">Ejecuta <code>DBMS_UTILITY.COMPILE_SCHEMA</code> solo sobre los objetos
+                inválidos, en el orden que exigen sus dependencias.</p>
+            <p class="text-body-secondary mb-0" th:if="${m.esquemasConInvalidos == null}">No disponible</p>
+            <p class="mb-0" th:if="${m.esquemasConInvalidos != null and m.esquemasConInvalidos.isEmpty()}">
+                <span class="badge text-bg-success">Sin problemas</span>
+                <span class="text-body-secondary">Ningún esquema de la organización tiene objetos inválidos.</span></p>
+            <form class="row g-3 align-items-end" method="post" th:action="@{/mantenimiento/recompilar/esquema}"
+                  th:if="${m.esquemasConInvalidos != null and !m.esquemasConInvalidos.isEmpty()}">
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="esquema-recompilar">Esquema</label>
+                    <select class="form-select" id="esquema-recompilar" name="esquema">
+                        <option th:each="e : ${m.esquemasConInvalidos}" th:value="${e.esquema}"
+                                th:text="${e.esquema} + ' (' + ${e.invalidos} + ' inválidos)'"></option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <button class="btn btn-primary w-100 py-2" type="submit">Recompilar esquema</button>
+                </div>
+            </form>
+        </section>
+
+        <form class="row g-3 align-items-end mb-4" method="get" th:action="@{/mantenimiento}">
+            <input type="hidden" name="vista" value="RECOMPILACION">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="limite-objetos">Filas por tabla (10 a 500)</label>
+                <input class="form-control" id="limite-objetos" name="limite" type="number" min="10" max="500"
+                       th:value="${m.limite}">
+            </div>
+            <div class="col-12 col-md-4">
+                <button class="btn btn-primary w-100 py-2" type="submit">Aplicar</button>
+            </div>
+        </form>
+
+        <section class="card p-4 mb-4" aria-labelledby="invalidos-title">
+            <h2 id="invalidos-title" class="h5 mb-1">Objetos inválidos que requieren intervención</h2>
+            <p class="text-body-secondary small" th:if="${m.invalidos != null and m.invalidos.truncado()}"
+               th:text="'Se muestran ' + ${m.invalidos.filas.size()} + ' de ' + ${m.invalidos.total} + ' objetos.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${m.invalidos == null}">No disponible</p>
+            <p class="mb-0" th:if="${m.invalidos != null and m.invalidos.filas.isEmpty()}">
+                <span class="badge text-bg-success">Sin problemas</span>
+                <span class="text-body-secondary">No hay objetos inválidos en los esquemas de la organización.</span></p>
+            <div class="table-responsive" th:if="${m.invalidos != null and !m.invalidos.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_OBJECTS (STATUS = 'INVALID') y DBA_ERRORS. Las fechas siguen
+                        el reloj del servidor de base de datos.</caption>
+                    <thead><tr>
+                        <th scope="col">Esquema</th>
+                        <th scope="col">Objeto</th>
+                        <th scope="col">Tipo</th>
+                        <th scope="col" class="text-end">Errores de compilación</th>
+                        <th scope="col">Última modificación (DDL)</th>
+                        <th scope="col">Acción</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${m.invalidos.filas}">
+                        <td th:text="${x.propietario}"></td>
+                        <th scope="row" class="text-break" th:text="${x.nombre}"></th>
+                        <td class="text-nowrap" th:text="${x.tipo}"></td>
+                        <td class="text-end" th:text="${x.errores}"></td>
+                        <td class="text-nowrap" th:text="${x.ultimaModificacion != null
+                            ? #temporals.format(x.ultimaModificacion, 'dd/MM/yyyy HH:mm:ss') : 'No disponible'}"></td>
+                        <td>
+                            <form class="mb-0" method="post" th:action="@{/mantenimiento/recompilar/objeto}"
+                                  th:if="${x.recompilable}">
+                                <input type="hidden" name="esquema" th:value="${x.propietario}">
+                                <input type="hidden" name="nombre" th:value="${x.nombre}">
+                                <input type="hidden" name="tipo" th:value="${x.tipo}">
+                                <button class="btn btn-primary btn-sm" type="submit">Recompilar</button>
+                            </form>
+                            <span class="small text-body-secondary" th:unless="${x.recompilable}">
+                                Recompile el esquema completo</span>
+                        </td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card p-4 mb-4" aria-labelledby="errores-title">
+            <h2 id="errores-title" class="h5 mb-1">Errores de compilación</h2>
+            <p class="text-body-secondary small">Mensajes de la última compilación de cada objeto. Indican qué hay que
+                corregir en el código cuando la recompilación no basta.</p>
+            <p class="text-body-secondary small" th:if="${m.errores != null and m.errores.truncado()}"
+               th:text="'Se muestran ' + ${m.errores.filas.size()} + ' de ' + ${m.errores.total} + ' mensajes.'"></p>
+            <p class="text-body-secondary mb-0" th:if="${m.errores == null}">No disponible</p>
+            <p class="mb-0" th:if="${m.errores != null and m.errores.filas.isEmpty()}">
+                <span class="badge text-bg-success">Sin problemas</span>
+                <span class="text-body-secondary">No hay errores de compilación registrados.</span></p>
+            <div class="table-responsive" th:if="${m.errores != null and !m.errores.filas.isEmpty()}">
+                <table class="table align-middle">
+                    <caption>Información obtenida de DBA_ERRORS.</caption>
+                    <thead><tr>
+                        <th scope="col">Objeto</th>
+                        <th scope="col">Tipo</th>
+                        <th scope="col">Línea:posición</th>
+                        <th scope="col">Clase</th>
+                        <th scope="col">Mensaje</th>
+                    </tr></thead>
+                    <tbody><tr th:each="x : ${m.errores.filas}">
+                        <th scope="row" class="text-break" th:text="${x.propietario} + '.' + ${x.nombre}"></th>
+                        <td class="text-nowrap" th:text="${x.tipo}"></td>
+                        <td class="text-nowrap" th:text="${x.linea} + ':' + ${x.posicion}"></td>
+                        <td><span class="badge" th:classappend="${x.atributo == 'ERROR'} ? 'text-bg-danger' : 'text-bg-warning'"
+                                  th:text="${x.atributo == 'ERROR'} ? 'Error' : 'Advertencia'"></span></td>
+                        <td class="text-break" th:text="${x.mensaje}"></td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</main>
+</body>
+</html>

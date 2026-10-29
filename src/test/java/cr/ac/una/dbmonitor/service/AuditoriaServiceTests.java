@@ -3,6 +3,7 @@ package cr.ac.una.dbmonitor.service;
 import cr.ac.una.dbmonitor.dto.AuditoriaDto;
 import cr.ac.una.dbmonitor.dto.FiltroOrigen;
 import cr.ac.una.dbmonitor.dto.FiltrosAuditoria;
+import cr.ac.una.dbmonitor.dto.Listado;
 import cr.ac.una.dbmonitor.dto.OrigenPrivilegio;
 import cr.ac.una.dbmonitor.dto.VistaAuditoria;
 import cr.ac.una.dbmonitor.repository.AuditoriaRepository;
@@ -36,7 +37,7 @@ class AuditoriaServiceTests {
                                                           Integer privilegiosAny) {
         var seleccionado = new AuditoriaDto.Beneficiario("APP", "USUARIO", false);
         return new AuditoriaDto.PrivilegiosAuditoria(List.of(seleccionado), seleccionado, "APP", roles,
-                sistema == null ? null : new AuditoriaDto.Listado<>(sistema, sistema.size()), privilegiosAny,
+                sistema == null ? null : new Listado<>(sistema, sistema.size()), privilegiosAny,
                 null, List.of());
     }
 
@@ -86,7 +87,7 @@ class AuditoriaServiceTests {
         var propio = new AuditoriaDto.Beneficiario("APP", "USUARIO", false);
         var oracle = new AuditoriaDto.Beneficiario("DBA", "ROL", true);
         var datos = new AuditoriaDto.PrivilegiosAuditoria(List.of(seleccionado, propio, oracle), seleccionado,
-                "SYSTEM", List.of(), new AuditoriaDto.Listado<>(List.of(), 0), 0, null, List.of());
+                "SYSTEM", List.of(), new Listado<>(List.of(), 0), 0, null, List.of());
         when(repository.consultar(any())).thenReturn(new AuditoriaDto(null, null, null, null, null, datos, null,
                 List.of("aviso previo")));
         var resultado = service.obtenerAuditoria(VistaAuditoria.PRIVILEGIOS, FiltroOrigen.ORGANIZACION, null, null,

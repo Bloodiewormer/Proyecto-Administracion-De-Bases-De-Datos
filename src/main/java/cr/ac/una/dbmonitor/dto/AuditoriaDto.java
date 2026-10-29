@@ -14,17 +14,6 @@ public record AuditoriaDto(FiltrosAuditoria filtros, Contexto contexto, Resumen 
         return new AuditoriaDto(filtros, contexto, resumen, usuarios, roles, nuevos, objetos, avisos);
     }
 
-    /** Filas devueltas y total de coincidencias antes de aplicar el límite de filas. */
-    public record Listado<T>(List<T> filas, int total) {
-        public Listado {
-            filas = List.copyOf(filas);
-        }
-
-        public boolean truncado() {
-            return total > filas.size();
-        }
-    }
-
     public record Contexto(String contenedor, boolean esPdb, String usuarioSesion) {}
 
     public record Resumen(Integer usuarios, Integer usuariosOrganizacion, Integer cuentasRestringidas,

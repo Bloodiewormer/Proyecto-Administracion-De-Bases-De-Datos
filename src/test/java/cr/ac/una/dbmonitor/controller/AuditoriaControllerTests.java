@@ -3,6 +3,7 @@ package cr.ac.una.dbmonitor.controller;
 import cr.ac.una.dbmonitor.dto.AuditoriaDto;
 import cr.ac.una.dbmonitor.dto.FiltroOrigen;
 import cr.ac.una.dbmonitor.dto.FiltrosAuditoria;
+import cr.ac.una.dbmonitor.dto.Listado;
 import cr.ac.una.dbmonitor.dto.OrigenPrivilegio;
 import cr.ac.una.dbmonitor.dto.VistaAuditoria;
 import cr.ac.una.dbmonitor.service.AuditoriaService;
@@ -52,7 +53,7 @@ class AuditoriaControllerTests {
         var cuenta = new AuditoriaDto.CuentaAdministrativa("SYS", List.of("SYSDBA", "SYSOPER"), "OPEN",
                 "PASSWORD", true, null);
         responder(new AuditoriaDto(filtros(VistaAuditoria.USUARIOS), CONTEXTO, RESUMEN,
-                new AuditoriaDto.UsuariosAuditoria(new AuditoriaDto.Listado<>(List.of(usuario, oracle), 5),
+                new AuditoriaDto.UsuariosAuditoria(new Listado<>(List.of(usuario, oracle), 5),
                         List.of(cuenta)), null, null, null, List.of()));
         mvc.perform(get("/auditoria")).andExpect(status().isOk()).andExpect(view().name("auditoria"))
                 .andExpect(content().string(containsString("APP_VENTAS")))
@@ -74,8 +75,8 @@ class AuditoriaControllerTests {
         var rol = new AuditoriaDto.Rol("GESTOR_VENTAS", "NONE", false, false, 1, 0);
         var asignacion = new AuditoriaDto.AsignacionRol("APP_VENTAS", "USUARIO", "GESTOR_VENTAS", true, false, false);
         responder(new AuditoriaDto(filtros(VistaAuditoria.ROLES), CONTEXTO, RESUMEN, null,
-                new AuditoriaDto.RolesAuditoria(new AuditoriaDto.Listado<>(List.of(rol), 1),
-                        new AuditoriaDto.Listado<>(List.of(asignacion), 1)), null, null, List.of()));
+                new AuditoriaDto.RolesAuditoria(new Listado<>(List.of(rol), 1),
+                        new Listado<>(List.of(asignacion), 1)), null, null, List.of()));
         mvc.perform(get("/auditoria").param("vista", "roles")).andExpect(status().isOk())
                 .andExpect(content().string(containsString("GESTOR_VENTAS")))
                 .andExpect(content().string(containsString("No requiere contraseña")))
@@ -91,10 +92,10 @@ class AuditoriaControllerTests {
                 List.of(seleccionado, new AuditoriaDto.Beneficiario("GESTOR_VENTAS", "ROL", false)), seleccionado,
                 "APP_VENTAS", List.of(new AuditoriaDto.RolEfectivo("GESTOR_VENTAS", 1, null, false, true),
                         new AuditoriaDto.RolEfectivo("RESOURCE", 2, "GESTOR_VENTAS", false, true)),
-                new AuditoriaDto.Listado<>(List.of(
+                new Listado<>(List.of(
                         new AuditoriaDto.PrivilegioSistema("CREATE SESSION", "APP_VENTAS", true, false),
                         new AuditoriaDto.PrivilegioSistema("CREATE TABLE", "RESOURCE", false, false)), 2), 0,
-                new AuditoriaDto.Listado<>(List.of(new AuditoriaDto.PrivilegioObjeto("SELECT", "VENTAS", "FACTURAS",
+                new Listado<>(List.of(new AuditoriaDto.PrivilegioObjeto("SELECT", "VENTAS", "FACTURAS",
                         "TABLE", "GESTOR_VENTAS", "VENTAS", false, true)), 1),
                 List.of("No se identificaron privilegios de alto impacto."));
         responder(new AuditoriaDto(filtros(VistaAuditoria.PRIVILEGIOS), CONTEXTO, RESUMEN, null, null,
@@ -121,11 +122,11 @@ class AuditoriaControllerTests {
 
     @Test
     void distingueAusenciaDeProblemasDeFaltaDePermisos() throws Exception {
-        var vacio = new AuditoriaDto.Listado<AuditoriaDto.ErrorCompilacion>(List.of(), 0);
+        var vacio = new Listado<AuditoriaDto.ErrorCompilacion>(List.of(), 0);
         var indice = new AuditoriaDto.IndiceInutilizable("SYS", "I_FED_BINDS$", null, "SYS", "FED$BINDS");
         responder(new AuditoriaDto(filtros(VistaAuditoria.OBJETOS), CONTEXTO, RESUMEN, null, null, null,
-                new AuditoriaDto.ObjetosAuditoria(null, vacio, new AuditoriaDto.Listado<>(List.of(), 0),
-                        new AuditoriaDto.Listado<>(List.of(indice), 1)),
+                new AuditoriaDto.ObjetosAuditoria(null, vacio, new Listado<>(List.of(), 0),
+                        new Listado<>(List.of(indice), 1)),
                 List.of("DBA_OBJECTS: vista no accesible o inexistente.")));
         mvc.perform(get("/auditoria").param("vista", "OBJETOS")).andExpect(status().isOk())
                 .andExpect(content().string(containsString("Objetos inválidos (DBA_OBJECTS): vista no accesible")))

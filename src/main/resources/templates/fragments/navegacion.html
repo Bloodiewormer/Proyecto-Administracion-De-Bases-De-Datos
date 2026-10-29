@@ -33,6 +33,11 @@
                    th:classappend="${seccion == 'auditoria'} ? 'active' : ''"
                    th:attr="aria-current=${seccion == 'auditoria'} ? 'page' : null">Auditoría</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" th:href="@{/mantenimiento}"
+                   th:classappend="${seccion == 'mantenimiento'} ? 'active' : ''"
+                   th:attr="aria-current=${seccion == 'mantenimiento'} ? 'page' : null">Mantenimiento</a>
+            </li>
         </ul>
     </nav>
 </header>
