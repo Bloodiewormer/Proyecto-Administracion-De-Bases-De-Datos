@@ -33,10 +33,10 @@ class AlmacenamientoServiceTests {
                 new BigDecimal("1000"), new BigDecimal("200"), new BigDecimal("100"), 1, 1);
 
         var raw = new AlmacenamientoRepository.DatosAlmacenamientoRaw(
-                resumen, List.of(ts), List.of(), List.of(), List.of(), List.of("aviso prueba"));
+                resumen, List.of(ts), List.of(), List.of(), List.of(), List.of("aviso prueba"), null, List.of());
 
         when(repository.consultar(any(), anyInt())).thenReturn(raw);
-        when(registroCrecimiento.obtenerMediciones()).thenReturn(List.of());
+        when(registroCrecimiento.obtenerMediciones(any(), any())).thenReturn(List.of());
 
         var resultado = service.obtenerAlmacenamiento(FiltroTipoObjeto.TODOS, 10);
 
@@ -46,10 +46,10 @@ class AlmacenamientoServiceTests {
 
         var res = resultado.resumen();
         assertNotNull(res);
-        assertEquals(new BigDecimal("1300"), res.tamanoTotalBytes());
+        assertEquals(new BigDecimal("1000"), res.tamanoTotalBytes());
         assertEquals(new BigDecimal("450"), res.usadoBytes());
         assertEquals(new BigDecimal("550"), res.libreBytes());
-        assertEquals(new BigDecimal("34.62"), res.porcentajeUso());
+        assertEquals(new BigDecimal("45.00"), res.porcentajeUso());
         assertTrue(resultado.avisos().contains("aviso prueba"));
     }
 
@@ -63,10 +63,10 @@ class AlmacenamientoServiceTests {
                 new BigDecimal("500"), null);
 
         var raw = new AlmacenamientoRepository.DatosAlmacenamientoRaw(
-                null, List.of(ts1, ts2), List.of(), List.of(), List.of(), List.of());
+                null, List.of(ts1, ts2), List.of(), List.of(), List.of(), List.of(), null, List.of());
 
         when(repository.consultar(any(), anyInt())).thenReturn(raw);
-        when(registroCrecimiento.obtenerMediciones()).thenReturn(List.of());
+        when(registroCrecimiento.obtenerMediciones(any(), any())).thenReturn(List.of());
 
         var resultado = service.obtenerAlmacenamiento(FiltroTipoObjeto.TODOS, 10);
 
@@ -92,7 +92,7 @@ class AlmacenamientoServiceTests {
     })
     void limitaTopEntreCincoYCincuenta(int entrada, int esperado) {
         var raw = new AlmacenamientoRepository.DatosAlmacenamientoRaw(
-                null, List.of(), List.of(), List.of(), List.of(), List.of());
+                null, List.of(), List.of(), List.of(), List.of(), List.of(), null, List.of());
         when(repository.consultar(any(), eq(esperado))).thenReturn(raw);
 
         var res = service.obtenerAlmacenamiento(FiltroTipoObjeto.TODOS, entrada);
@@ -104,7 +104,7 @@ class AlmacenamientoServiceTests {
     @Test
     void toleraValoresNulosSinFallar() {
         var raw = new AlmacenamientoRepository.DatosAlmacenamientoRaw(
-                null, List.of(), List.of(), List.of(), List.of(), List.of());
+                null, List.of(), List.of(), List.of(), List.of(), List.of(), null, List.of());
         when(repository.consultar(any(), anyInt())).thenReturn(raw);
 
         var res = service.obtenerAlmacenamiento(null, null);
@@ -117,16 +117,54 @@ class AlmacenamientoServiceTests {
     }
 
     @Test
+    void capturaSinDatosNoPuedeTerminarConExito() {
+        assertThrows(IllegalStateException.class, service::registrarMedicionActual);
+    }
+
+    @Test
     void registroMedicionActualInvocaServicioDeRegistro() {
-        var resumen = new ResumenAlmacenamientoDto(null, new BigDecimal("300"), null, null,
-                new BigDecimal("800"), new BigDecimal("100"), new BigDecimal("100"), 1, 1);
-        var raw = new AlmacenamientoRepository.DatosAlmacenamientoRaw(
-                resumen, List.of(), List.of(), List.of(), List.of(), List.of());
-        when(repository.consultar(any(), anyInt())).thenReturn(raw);
+        var origen = new cr.ac.una.dbmonitor.dto.CrecimientoDto.Origen(
+                BigDecimal.ONE, BigDecimal.TEN, 3, "FREE", "FREEPDB1", "FREEPDB1");
+        var guardado = new cr.ac.una.dbmonitor.dto.CrecimientoDto.Registro(BigDecimal.ONE,
+                java.time.LocalDateTime.of(2026, 10, 28, 12, 0), origen,
+                new BigDecimal("900"), new BigDecimal("300"), new BigDecimal("600"));
+        when(repository.registrarMedicion()).thenReturn(guardado);
+        assertDoesNotThrow(service::registrarMedicionActual);
+        verify(repository).registrarMedicion();
+        verify(repository, never()).consultar(any(), anyInt());
+    }
 
-        service.registrarMedicionActual();
+    @Test
+    void falloDePersistenciaSePropagaComoErrorAdministrativo() {
+        when(repository.registrarMedicion()).thenThrow(
+                new org.springframework.dao.DataAccessResourceFailureException("sin acceso"));
+        assertThrows(IllegalStateException.class, service::registrarMedicionActual);
+    }
 
-        verify(registroCrecimiento).registrarMedicion(eq(new BigDecimal("1000")),
-                eq(new BigDecimal("300")), eq(new BigDecimal("600")));
+    @Test
+    void ocupacionIncompletaNoSeConvierteEnCero() {
+        var ts = new TablespaceDto("DATA", "PERMANENT", "OFFLINE", "LOCAL", "AUTO",
+                new BigDecimal("1000"), null, null, new BigDecimal("2000"), null);
+        when(repository.consultar(any(), anyInt())).thenReturn(new AlmacenamientoRepository.DatosAlmacenamientoRaw(
+                null, List.of(ts), List.of(), List.of(), List.of(), List.of(), null, List.of()));
+        var resultado = service.obtenerAlmacenamiento(null, null);
+        assertEquals(new BigDecimal("1000"), resultado.resumen().tamanoTotalBytes());
+        assertNull(resultado.resumen().usadoBytes());
+        assertNull(resultado.resumen().libreBytes());
+        assertNull(resultado.resumen().porcentajeUso());
+        assertFalse(resultado.avisos().isEmpty());
+    }
+
+    @Test
+    void erroresPorTablespaceNoPuedenCompensarseEnElResumen() {
+        var a = new TablespaceDto("A", "PERMANENT", "ONLINE", "LOCAL", "AUTO",
+                new BigDecimal("100"), new BigDecimal("60"), new BigDecimal("30"), null, null);
+        var b = new TablespaceDto("B", "PERMANENT", "ONLINE", "LOCAL", "AUTO",
+                new BigDecimal("100"), new BigDecimal("60"), new BigDecimal("50"), null, null);
+        when(repository.consultar(any(), anyInt())).thenReturn(new AlmacenamientoRepository.DatosAlmacenamientoRaw(
+                null, List.of(a, b), List.of(), List.of(), List.of(), List.of(), null, List.of()));
+        var resultado = service.obtenerAlmacenamiento(null, null);
+        assertNull(resultado.resumen().usadoBytes());
+        assertNull(resultado.resumen().porcentajeUso());
     }
 }

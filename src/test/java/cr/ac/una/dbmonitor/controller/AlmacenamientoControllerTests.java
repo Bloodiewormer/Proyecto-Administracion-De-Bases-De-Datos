@@ -69,7 +69,8 @@ class AlmacenamientoControllerTests {
                 new BigDecimal("104857600"), new BigDecimal("52428800"), new BigDecimal("52428800"),
                 BigDecimal.ZERO, BigDecimal.ZERO);
 
-        var crecimiento = new CrecimientoDto(List.of(med), List.of());
+        var crecimiento = new CrecimientoDto(List.of(med), List.of(),
+                new CrecimientoDto.Origen(BigDecimal.ONE, BigDecimal.TEN, 3, "FREE", "PDB1", "PDB1"));
 
         var dto = new AlmacenamientoDto(resumen, List.of(ts), List.of(arch), List.of(obj),
                 crecimiento, FiltroTipoObjeto.TODOS, 10, List.of());
@@ -106,8 +107,28 @@ class AlmacenamientoControllerTests {
     void postSnapshotRegistraMedicionYRedirige() throws Exception {
         mvc.perform(post("/almacenamiento/snapshot"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/almacenamiento?snapshotExitoso=true"));
+                .andExpect(redirectedUrl("/almacenamiento"))
+                .andExpect(flash().attribute("snapshotExitoso", true));
 
         verify(service).registrarMedicionActual();
+    }
+
+    @Test
+    void parametroGetNoPuedeFabricarUnaCapturaExitosa() throws Exception {
+        when(service.obtenerAlmacenamiento(any(), any())).thenReturn(vacio(List.of()));
+        mvc.perform(get("/almacenamiento").param("snapshotExitoso", "true"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        containsString("¡Instantánea de almacenamiento registrada exitosamente"))));
+    }
+
+    @Test
+    void errorAlPersistirNoAnunciaExito() throws Exception {
+        doThrow(new IllegalStateException("No se pudo persistir la medición"))
+                .when(service).registrarMedicionActual();
+        mvc.perform(post("/almacenamiento/snapshot"))
+                .andExpect(redirectedUrl("/almacenamiento"))
+                .andExpect(flash().attributeExists("errorSnapshot"))
+                .andExpect(flash().attributeCount(1));
     }
 }

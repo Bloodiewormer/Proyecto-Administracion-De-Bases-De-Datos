@@ -28,7 +28,6 @@ public class AlmacenamientoController {
     @GetMapping("/almacenamiento")
     public String almacenamiento(@RequestParam(name = "tipo", required = false) String tipo,
                                  @RequestParam(name = "top", required = false) String top,
-                                 @RequestParam(name = "snapshotExitoso", required = false) Boolean snapshotExitoso,
                                  Model model, HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-store");
 
@@ -39,7 +38,6 @@ public class AlmacenamientoController {
         model.addAttribute("almacenamiento", datos);
         model.addAttribute("formatos", formatos);
         model.addAttribute("filtros", FiltroTipoObjeto.values());
-        model.addAttribute("snapshotExitoso", Boolean.TRUE.equals(snapshotExitoso));
 
         var avisos = new LinkedHashMap<String, List<String>>();
         for (var sec : List.of("general", "tablespaces", "archivos", "objetos", "crecimiento")) {
@@ -57,7 +55,7 @@ public class AlmacenamientoController {
     public String registrarInstantanea(RedirectAttributes redirectAttributes) {
         try {
             service.registrarMedicionActual();
-            redirectAttributes.addAttribute("snapshotExitoso", true);
+            redirectAttributes.addFlashAttribute("snapshotExitoso", true);
         } catch (Exception ex) {
             redirectAttributes.addFlashAttribute("errorSnapshot",
                     "No fue posible registrar la instantánea: " + ex.getMessage());
@@ -86,7 +84,7 @@ public class AlmacenamientoController {
         if (aviso.startsWith("DBA_SEGMENTS")) {
             return "objetos";
         }
-        if (aviso.startsWith("DBA_HIST_TBSPC_SPACE_USAGE")) {
+        if (aviso.startsWith("DBA_HIST_TBSPC_SPACE_USAGE") || aviso.startsWith("Historial Oracle")) {
             return "crecimiento";
         }
         return "general";
@@ -97,6 +95,7 @@ public class AlmacenamientoController {
                 .replace("DBA_DATA_FILES/DBA_TEMP_FILES:", "Archivos de datos:")
                 .replace("DBA_DATA_FILES/DBA_SEGMENTS/V$LOG:", "Resumen de base de datos:")
                 .replace("DBA_SEGMENTS:", "Objetos de almacenamiento:")
+                .replace("V$LOG:", "Redo de instancia (excluido de ocupación):")
                 .replace("DBA_HIST_TBSPC_SPACE_USAGE:", "Histórico AWR de Oracle:");
     }
 }

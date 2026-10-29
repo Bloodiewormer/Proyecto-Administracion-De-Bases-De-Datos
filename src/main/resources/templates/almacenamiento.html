@@ -27,7 +27,7 @@
     <!-- Tarjetas métricas de resumen global (Tamaño actual de la base de datos) -->
     <div class="row g-3 mb-4">
         <div class="col-12 col-md-3"><section class="card h-100 p-4">
-            <h2 class="h6 text-body-secondary">Tamaño total asignado</h2>
+            <h2 class="h6 text-body-secondary">Tamaño actual: datafiles + tempfiles</h2>
             <p class="fs-5 mb-0" th:text="${formatos.memoria(almacenamiento.resumen?.tamanoTotalBytes)}"></p>
             <p class="small text-body-secondary mb-0"
                th:if="${almacenamiento.resumen?.tamanoTotalBytes != null}"
@@ -38,7 +38,7 @@
             <p class="fs-5 mb-0" th:text="${formatos.memoria(almacenamiento.resumen?.usadoBytes)}"></p>
             <p class="small text-body-secondary mb-0"
                th:if="${almacenamiento.resumen?.porcentajeUso != null}"
-               th:text="'Ocupación global: ' + ${formatos.porcentaje(almacenamiento.resumen.porcentajeUso)}"></p>
+               th:text="'Ocupación de datafiles y tempfiles: ' + ${formatos.porcentaje(almacenamiento.resumen.porcentajeUso)}"></p>
         </section></div>
         <div class="col-12 col-md-3"><section class="card h-100 p-4">
             <h2 class="h6 text-body-secondary">Espacio libre disponible</h2>
@@ -51,7 +51,9 @@
             <h2 class="h6 text-body-secondary">Estructura física</h2>
             <p class="fs-5 mb-0"
                th:text="${(almacenamiento.resumen?.cantidadTablespaces ?: 0) + ' tablespaces / ' + (almacenamiento.resumen?.cantidadArchivos ?: 0) + ' archivos'}"></p>
-            <p class="small text-body-secondary mb-0">Datafiles, tempfiles y redo logs</p>
+            <p class="small text-body-secondary mb-0"
+               th:text="'Datafiles y tempfiles del contenedor consultado. Redo de instancia (excluido): '
+               + ${formatos.memoria(almacenamiento.resumen?.bytesRedoLogs)}"></p>
         </section></div>
     </div>
 
@@ -234,7 +236,14 @@
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
             <div>
                 <h2 id="crecimiento-title" class="h5 mb-1">Crecimiento y tendencia de almacenamiento</h2>
-                <p class="text-body-secondary small mb-0">Mecanismo para registrar y comparar la evolución del almacenamiento en el tiempo.</p>
+                <p class="text-body-secondary small mb-0"
+                   th:text="${almacenamiento.crecimiento?.origen != null}
+                     ? 'Historial Oracle · DBID ' + ${almacenamiento.crecimiento.origen.dbid}
+                       + ' · Instancia ' + ${almacenamiento.crecimiento.origen.instancia}
+                       + ' · Servicio ' + ${formatos.texto(almacenamiento.crecimiento.origen.servicio)}
+                       + ' · Contenedor ' + ${almacenamiento.crecimiento.origen.contenedor}
+                       + ' (DBID ' + ${almacenamiento.crecimiento.origen.contenedorDbid} + ')'
+                     : 'Historial Oracle no disponible: no se pudo identificar el origen.'"></p>
             </div>
             <form method="post" th:action="@{/almacenamiento/snapshot}">
                 <button type="submit" class="btn btn-primary btn-sm px-3 py-2">
@@ -243,7 +252,7 @@
             </form>
         </div>
 
-        <h3 class="h6 text-body-secondary mt-2 mb-3">Historial de mediciones registradas</h3>
+        <h3 class="h6 text-body-secondary mt-2 mb-3">Historial de mediciones registradas en Oracle (máximo 200)</h3>
         <p class="text-body-secondary mb-0"
            th:if="${almacenamiento.crecimiento?.mediciones == null or almacenamiento.crecimiento.mediciones.isEmpty()}">
             Aún no se han registrado mediciones en el historial. Utilice el botón "Registrar medición actual" para iniciar el seguimiento.
@@ -255,7 +264,7 @@
                 <caption>Registro cronológico de snapshots de almacenamiento comparando variación y tendencia entre tomas.</caption>
                 <thead><tr>
                     <th scope="col">Fecha y hora</th>
-                    <th scope="col" class="text-end">Tamaño total BD</th>
+                    <th scope="col" class="text-end">Datafiles + tempfiles</th>
                     <th scope="col" class="text-end">Espacio usado</th>
                     <th scope="col" class="text-end">Espacio libre</th>
                     <th scope="col" class="text-end">Variación</th>
@@ -291,10 +300,10 @@
 
         <!-- Registros históricos AWR de Oracle (si la instancia cuenta con snapshots de Diagnostic Pack) -->
         <div th:if="${almacenamiento.crecimiento?.historicoAwr != null and !almacenamiento.crecimiento.historicoAwr.isEmpty()}" class="mt-3">
-            <h3 class="h6 text-body-secondary mb-2">Histórico AWR detectado en Oracle (DBA_HIST_TBSPC_SPACE_USAGE)</h3>
+            <h3 class="h6 text-body-secondary mb-2">Referencia AWR por tablespace (independiente del historial de mediciones)</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle">
-                    <caption>Muestras históricas recolectadas automáticamente por el repositorio AWR de Oracle Database.</caption>
+                    <caption>Referencia complementaria por tablespace; no se combina con las mediciones propias de crecimiento.</caption>
                     <thead><tr>
                         <th scope="col">Fecha AWR</th>
                         <th scope="col">Tablespace</th>
@@ -324,49 +333,24 @@
                      data-bs-parent="#accordionDocCrecimiento">
                     <div class="accordion-body">
                         <p class="small text-body-secondary">
-                            Para entornos de producción donde se requiere registrar el crecimiento histórico directamente
-                            en el motor Oracle sin depender exclusivamente del sondeo externo, se documenta el mecanismo
-                            estándar de administración mediante una tabla de historial y un job programado con <code>DBMS_SCHEDULER</code>:
+                            El historial mostrado utiliza exclusivamente el mecanismo de crecimiento instalado directamente
+                            en Oracle. Instale el script completo en el esquema y contenedor consultados. La captura manual y el job usan el mismo procedimiento; no se utiliza el JSON heredado. El mecanismo
+                            registra datafiles y tempfiles mediante una tabla identificada por base y contenedor y un job opcional de <code>DBMS_SCHEDULER</code>:
                         </p>
-                        <pre class="bg-light p-3 rounded border small"><code>-- 1. Tabla para almacenar snapshots periódicos de almacenamiento
-CREATE TABLE HISTORIAL_CRECIMIENTO_BD (
-    ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    FECHA TIMESTAMP DEFAULT SYSTIMESTAMP,
-    BYTES_DATAFILES NUMBER,
-    BYTES_TEMPFILES NUMBER,
-    BYTES_REDO NUMBER DEFAULT 0,
-    BYTES_USADOS NUMBER,
-    BYTES_LIBRES NUMBER
-);
+                        <pre class="bg-light p-3 rounded border small"><code>-- Instalar como propietario, en el contenedor consultado:
+-- src/main/resources/db/mecanismo_crecimiento_oracle.sql
+-- Permisos y migración: docs/modulo-3-almacenamiento.md
 
--- 2. Procedimiento administrativo para recolectar métricas
-CREATE OR REPLACE PROCEDURE REGISTRAR_CRECIMIENTO_ALMACENAMIENTO AS
+-- Captura manual de ejemplo: la web ejecuta el mismo procedimiento.
+DECLARE
+    V_ID NUMBER;
 BEGIN
-    INSERT INTO HISTORIAL_CRECIMIENTO_BD (BYTES_DATAFILES, BYTES_TEMPFILES, BYTES_REDO, BYTES_USADOS, BYTES_LIBRES)
-    SELECT
-        (SELECT NVL(SUM(BYTES), 0) FROM DBA_DATA_FILES),
-        (SELECT NVL(SUM(BYTES), 0) FROM DBA_TEMP_FILES),
-        (SELECT NVL(SUM(BYTES * MEMBERS), NVL(SUM(BYTES), 0)) FROM V$LOG),
-        (SELECT NVL(SUM(BYTES), 0) FROM DBA_SEGMENTS),
-        (SELECT NVL(SUM(BYTES), 0) FROM DBA_FREE_SPACE)
-    FROM DUAL;
+    SP_REGISTRAR_CRECIMIENTO(V_ID);
     COMMIT;
 END;
 /
-
--- 3. Programación automática diaria con DBMS_SCHEDULER
-BEGIN
-    DBMS_SCHEDULER.CREATE_JOB (
-        job_name        => 'JOB_HISTORIAL_ALMACENAMIENTO',
-        job_type        => 'PLSQL_BLOCK',
-        job_action      => 'BEGIN REGISTRAR_CRECIMIENTO_ALMACENAMIENTO; END;',
-        start_date      => SYSTIMESTAMP,
-        repeat_interval => 'FREQ=DAILY; BYHOUR=0; BYMINUTE=0; BYSECOND=0',
-        enabled         => TRUE,
-        comments        => 'Captura diaria del crecimiento de la base de datos'
-    );
-END;
-/</code></pre>
+-- El job diario utiliza este mismo procedimiento y tabla.
+-- Se crea deshabilitado; el DBA lo habilita tras validar el entorno.</code></pre>
                     </div>
                 </div>
             </div>
