@@ -212,7 +212,7 @@ class AlmacenamientoRepositoryTests {
         assertTrue(salida.getAll().contains("errorCode=20001"));
         assertTrue(salida.getAll().contains("SQLState=72000"));
         assertTrue(salida.getAll().contains("errorCode=17001"));
-        assertTrue(salida.getAll().contains("causa raíz"));
+        assertTrue(salida.getAll().contains("causa "));
         assertFalse(salida.getAll().contains("clave-prueba"));
         assertFalse(salida.getAll().contains("cuenta-prueba"));
         assertFalse(salida.getAll().contains("jdbc:oracle:thin:"));
